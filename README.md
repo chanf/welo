@@ -173,16 +173,16 @@ local-development
 | `src/` | Worker API、认证、响应和工具函数 |
 | `frontend-prototype/` | Vite 前端应用 |
 | `migrations/` | D1 数据库迁移 |
-| `api-docs.yaml` | OpenAPI 契约 |
-| `产品设计文档.md` | 产品定位、角色权限和页面流程 |
-| `后端详细设计文档.md` | Worker、D1 和 API 设计 |
-| `数据库设计文档.md` | 数据模型与约束设计 |
-| `前端接入说明.md` | 前端调用 API 的详细约定 |
-| `Cloudflare部署文档.md` | Cloudflare 控制台部署步骤 |
+| `Docs/api-docs.yaml` | OpenAPI 契约 |
+| `Docs/产品设计文档.md` | 产品定位、角色权限和页面流程 |
+| `Docs/后端详细设计文档.md` | Worker、D1 和 API 设计 |
+| `Docs/数据库设计文档.md` | 数据模型与约束设计 |
+| `Docs/前端接入说明.md` | 前端调用 API 的详细约定 |
+| `Docs/Cloudflare部署文档.md` | Cloudflare 控制台部署步骤 |
 
 ## API 契约
 
-API 契约见 [api-docs.yaml](./api-docs.yaml)，可导入 Swagger UI、Apifox 或其他 OpenAPI 兼容工具。
+API 契约见 [api-docs.yaml](./Docs/api-docs.yaml)，可导入 Swagger UI、Apifox 或其他 OpenAPI 兼容工具。
 
 统一 API 前缀为：
 
@@ -203,7 +203,7 @@ API 契约见 [api-docs.yaml](./api-docs.yaml)，可导入 Swagger UI、Apifox �
 - 数据库：Cloudflare D1
 - 前端：Cloudflare Pages
 
-完整控制台操作、D1 创建、binding、环境变量、CORS、Cron、Pages 配置、自定义域名和验收清单见 [Cloudflare部署文档.md](./Cloudflare部署文档.md)。
+完整控制台操作、D1 创建、binding、环境变量、CORS、Cron、Pages 配置、自定义域名和验收清单见 [Cloudflare部署文档.md](./Docs/Cloudflare部署文档.md)。
 
 ## 安全约定
 
