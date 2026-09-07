@@ -12,6 +12,7 @@
     "types": "wrangler types",
     "db:migrate:local": "wrangler d1 migrations apply welo --local",
     "db:migrate:remote": "wrangler d1 migrations apply welo --remote",
+    "deploy:production": "wrangler deploy --env production",
     "test": "npm run build && npm run frontend:test"
   },
   "dependencies": {

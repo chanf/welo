@@ -21,6 +21,27 @@
     "SESSION_TTL_DAYS": "14",
     "CORS_ORIGINS": "http://localhost:5173,http://localhost:8787"
   },
+  "env": {
+    "production": {
+      "name": "welo-api",
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "welo",
+          "database_id": "9b5449af-659f-4e44-93f9-44370a4cddf3",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "vars": {
+        "ENVIRONMENT": "production",
+        "SESSION_TTL_DAYS": "14",
+        "CORS_ORIGINS": "https://welo.909939.xyz"
+      },
+      "triggers": {
+        "crons": ["*/30 * * * *"]
+      }
+    }
+  },
   "triggers": {
     "crons": ["*/30 * * * *"]
   }
