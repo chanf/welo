@@ -1,0 +1,1057 @@
+openapi: 3.0.3
+info:
+  title: Welo Task Management API
+  version: 1.0.0
+  description: |
+    Welo 多团队任务管理系统 V1 API。
+    后端部署目标为 Cloudflare Workers，主数据库为 Cloudflare D1。
+    所有项目、任务、工作台和甘特图数据都必须在服务端执行团队/小组可见性校验。
+servers:
+  - url: /api/v1
+tags:
+  - name: Auth
+  - name: Users
+  - name: Teams
+  - name: Groups
+  - name: Projects
+  - name: Tasks
+  - name: Dashboard
+  - name: Admin
+security:
+  - cookieAuth: []
+  - bearerAuth: []
+paths:
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: 注册并创建会话
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
+      responses:
+        '201':
+          description: 注册成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthEnvelope' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: 登录
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthEnvelope' }
+        '401': { $ref: '#/components/responses/InvalidCredentials' }
+        '423': { $ref: '#/components/responses/AccountLocked' }
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: 退出当前会话
+      responses:
+        '200': { $ref: '#/components/responses/SuccessNull' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: 当前用户和可访问团队
+      responses:
+        '200':
+          description: 当前用户
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MeEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+  /users/me:
+    patch:
+      tags: [Users]
+      summary: 更新个人资料
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProfileUpdateRequest' }
+      responses:
+        '200':
+          description: 更新后的用户
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserEnvelope' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /teams:
+    get:
+      tags: [Teams]
+      summary: 当前用户可访问团队
+      responses:
+        '200':
+          description: 团队列表
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TeamListEnvelope' }
+    post:
+      tags: [Teams]
+      summary: 创建团队（仅超管）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TeamWriteRequest' }
+      responses:
+        '201':
+          description: 团队
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TeamEnvelope' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /teams/{teamId}:
+    parameters:
+      - $ref: '#/components/parameters/TeamId'
+    get:
+      tags: [Teams]
+      summary: 团队详情
+      responses:
+        '200':
+          description: 团队
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TeamEnvelope' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Teams]
+      summary: 更新或归档团队（仅超管）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TeamUpdateRequest' }
+      responses:
+        '200':
+          description: 团队
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TeamEnvelope' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /teams/{teamId}/members:
+    parameters:
+      - $ref: '#/components/parameters/TeamId'
+    get:
+      tags: [Teams]
+      summary: 团队成员列表（仅超管）
+      responses:
+        '200':
+          description: 成员列表
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MemberListEnvelope' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Teams]
+      summary: 添加团队成员（仅超管）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MemberAddRequest' }
+      responses:
+        '201':
+          description: 成员
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MemberEnvelope' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /teams/{teamId}/members/{userId}:
+    delete:
+      tags: [Teams]
+      summary: 移出团队成员（仅超管）
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200': { $ref: '#/components/responses/SuccessNull' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /teams/{teamId}/groups:
+    parameters:
+      - $ref: '#/components/parameters/TeamId'
+    get:
+      tags: [Groups]
+      summary: 团队小组列表
+      responses:
+        '200':
+          description: 小组列表
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GroupListEnvelope' }
+    post:
+      tags: [Groups]
+      summary: 创建小组（仅超管）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GroupWriteRequest' }
+      responses:
+        '201':
+          description: 小组
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GroupEnvelope' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /teams/{teamId}/groups/{groupId}:
+    parameters:
+      - $ref: '#/components/parameters/TeamId'
+      - $ref: '#/components/parameters/GroupId'
+    patch:
+      tags: [Groups]
+      summary: 更新或停用小组（仅超管）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GroupUpdateRequest' }
+      responses:
+        '200':
+          description: 小组
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GroupEnvelope' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /teams/{teamId}/groups/{groupId}/members:
+    get:
+      tags: [Groups]
+      summary: 查询小组成员
+      description: 超级管理员可查询任意小组成员；普通成员仅可查询自己所属的小组。
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+        - $ref: '#/components/parameters/GroupId'
+      responses:
+        '200':
+          description: 小组成员引用列表
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GroupMemberListEnvelope' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Groups]
+      summary: 添加小组成员（仅超管）
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+        - $ref: '#/components/parameters/GroupId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MemberAddRequest' }
+      responses:
+        '201':
+          description: 成员
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MemberEnvelope' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /teams/{teamId}/groups/{groupId}/members/{userId}:
+    delete:
+      tags: [Groups]
+      summary: 移出小组成员（仅超管）
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+        - $ref: '#/components/parameters/GroupId'
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200': { $ref: '#/components/responses/SuccessNull' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /teams/{teamId}/projects:
+    parameters:
+      - $ref: '#/components/parameters/TeamId'
+    get:
+      tags: [Projects]
+      summary: 项目列表
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Keyword'
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/ProjectStatus' }
+      responses:
+        '200':
+          description: 项目分页
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectPageEnvelope' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Projects]
+      summary: 创建项目
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectCreateRequest' }
+      responses:
+        '201':
+          description: 项目
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectEnvelope' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /teams/{teamId}/projects/{projectId}:
+    parameters:
+      - $ref: '#/components/parameters/TeamId'
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags: [Projects]
+      summary: 项目详情
+      responses:
+        '200':
+          description: 项目
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectEnvelope' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Projects]
+      summary: 更新或归档项目（仅超管）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectUpdateRequest' }
+      responses:
+        '200':
+          description: 项目
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectEnvelope' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Projects]
+      summary: 软删除项目（仅超管）
+      parameters:
+        - name: confirmName
+          in: query
+          required: true
+          schema: { type: string, minLength: 2, maxLength: 64 }
+      responses:
+        '200': { $ref: '#/components/responses/SuccessNull' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /teams/{teamId}/projects/{projectId}/tasks:
+    parameters:
+      - $ref: '#/components/parameters/TeamId'
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags: [Tasks]
+      summary: 项目内可见任务列表
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/TaskFiltersGroupId'
+        - $ref: '#/components/parameters/TaskFiltersAssigneeId'
+        - $ref: '#/components/parameters/TaskFiltersStatus'
+        - $ref: '#/components/parameters/TaskFiltersPriority'
+        - name: startDateFrom
+          in: query
+          schema: { type: string, format: date }
+        - name: startDateTo
+          in: query
+          schema: { type: string, format: date }
+        - name: endDateFrom
+          in: query
+          schema: { type: string, format: date }
+        - name: endDateTo
+          in: query
+          schema: { type: string, format: date }
+        - name: sortBy
+          in: query
+          schema: { type: string, enum: [endDate, createdAt, priority], default: endDate }
+        - name: sortOrder
+          in: query
+          schema: { type: string, enum: [asc, desc], default: asc }
+      responses:
+        '200':
+          description: 任务分页
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TaskPageEnvelope' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Tasks]
+      summary: 创建任务
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TaskCreateRequest' }
+      responses:
+        '201':
+          description: 任务
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TaskEnvelope' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /teams/{teamId}/projects/{projectId}/gantt:
+    get:
+      tags: [Tasks]
+      summary: 甘特图数据
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/TaskFiltersGroupId'
+        - $ref: '#/components/parameters/TaskFiltersAssigneeId'
+        - $ref: '#/components/parameters/TaskFiltersStatus'
+        - $ref: '#/components/parameters/TaskFiltersPriority'
+        - name: granularity
+          in: query
+          schema: { type: string, enum: [day, week, month], default: week }
+      responses:
+        '200':
+          description: 甘特图范围和任务
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GanttEnvelope' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /teams/{teamId}/projects/{projectId}/tasks/{taskId}:
+    parameters:
+      - $ref: '#/components/parameters/TeamId'
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/TaskId'
+    get:
+      tags: [Tasks]
+      summary: 任务详情
+      responses:
+        '200':
+          description: 任务
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TaskEnvelope' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Tasks]
+      summary: 修改任务
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TaskUpdateRequest' }
+      responses:
+        '200':
+          description: 任务
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TaskEnvelope' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [Tasks]
+      summary: 软删除任务（仅超管）
+      responses:
+        '200': { $ref: '#/components/responses/SuccessNull' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /teams/{teamId}/projects/{projectId}/tasks/{taskId}/schedule:
+    patch:
+      tags: [Tasks]
+      summary: 甘特图拖拽保存排期
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/TaskId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ScheduleUpdateRequest' }
+      responses:
+        '200':
+          description: 最新任务
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TaskEnvelope' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/VersionConflict' }
+  /teams/{teamId}/dashboard:
+    get:
+      tags: [Dashboard]
+      summary: 团队工作台数据
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+      responses:
+        '200':
+          description: 工作台聚合数据
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DashboardEnvelope' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /admin/overview:
+    get:
+      tags: [Admin]
+      summary: 平台概览（仅超管）
+      responses:
+        '200':
+          description: 平台统计
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminOverviewEnvelope' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /admin/users:
+    get:
+      tags: [Admin]
+      summary: 用户管理列表（仅超管）
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Keyword'
+        - name: systemRole
+          in: query
+          schema: { $ref: '#/components/schemas/SystemRole' }
+      responses:
+        '200':
+          description: 用户分页
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserPageEnvelope' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /admin/users/{userId}/role:
+    patch:
+      tags: [Admin]
+      summary: 授予或撤销超级管理员（仅超管）
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [systemRole]
+              properties:
+                systemRole: { $ref: '#/components/schemas/SystemRole' }
+      responses:
+        '200':
+          description: 用户
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserEnvelope' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: welo_session
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: SessionToken
+  parameters:
+    TeamId:
+      name: teamId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    GroupId:
+      name: groupId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    ProjectId:
+      name: projectId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    TaskId:
+      name: taskId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    PageSize:
+      name: pageSize
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    Keyword:
+      name: keyword
+      in: query
+      schema: { type: string, maxLength: 100 }
+    TaskFiltersGroupId:
+      name: groupId
+      in: query
+      schema: { $ref: '#/components/schemas/Id' }
+    TaskFiltersAssigneeId:
+      name: assigneeId
+      in: query
+      schema: { $ref: '#/components/schemas/Id' }
+    TaskFiltersStatus:
+      name: status
+      in: query
+      schema: { $ref: '#/components/schemas/TaskStatus' }
+    TaskFiltersPriority:
+      name: priority
+      in: query
+      schema: { $ref: '#/components/schemas/TaskPriority' }
+  responses:
+    SuccessNull:
+      description: 操作成功
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/SuccessNullEnvelope' }
+    ValidationError:
+      description: 参数校验失败
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    InvalidCredentials:
+      description: 用户名或密码错误
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    AccountLocked:
+      description: 账号锁定
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Unauthenticated:
+      description: 未登录或会话失效
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Forbidden:
+      description: 无权限
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    NotFound:
+      description: 资源不存在、已删除或当前用户不可见
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Conflict:
+      description: 资源冲突
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    VersionConflict:
+      description: 数据版本冲突
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  schemas:
+    Id:
+      type: string
+      pattern: '^[0-9]+$'
+      example: '123'
+    SystemRole:
+      type: string
+      enum: [super_admin, member]
+    TeamStatus:
+      type: string
+      enum: [active, archived]
+    GroupStatus:
+      type: string
+      enum: [active, disabled]
+    ProjectStatus:
+      type: string
+      enum: [active, archived]
+    TaskStatus:
+      type: string
+      enum: [todo, in_progress, done]
+    TaskPriority:
+      type: string
+      enum: [low, medium, high, urgent]
+    RegisterRequest:
+      type: object
+      required: [username, email, password, passwordConfirmation]
+      properties:
+        username: { type: string, minLength: 2, maxLength: 32, example: linyizhou }
+        email: { type: string, format: email, maxLength: 255, example: linyi@example.com }
+        password: { type: string, minLength: 8, format: password }
+        passwordConfirmation: { type: string, minLength: 8, format: password }
+    LoginRequest:
+      type: object
+      required: [account, password]
+      properties:
+        account: { type: string, minLength: 1, maxLength: 255, example: linyi@example.com }
+        password: { type: string, minLength: 1, format: password }
+    ProfileUpdateRequest:
+      type: object
+      minProperties: 1
+      properties:
+        username: { type: string, minLength: 2, maxLength: 32 }
+        email: { type: string, format: email, maxLength: 255 }
+        language: { type: string, enum: [zh-CN, en-US] }
+    TeamWriteRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 64 }
+        description: { type: string, maxLength: 500, nullable: true }
+    TeamUpdateRequest:
+      allOf:
+        - $ref: '#/components/schemas/TeamWriteRequest'
+        - type: object
+          properties:
+            status: { $ref: '#/components/schemas/TeamStatus' }
+    GroupWriteRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 64 }
+        description: { type: string, maxLength: 500, nullable: true }
+    GroupUpdateRequest:
+      allOf:
+        - $ref: '#/components/schemas/GroupWriteRequest'
+        - type: object
+          properties:
+            status: { $ref: '#/components/schemas/GroupStatus' }
+    MemberAddRequest:
+      type: object
+      required: [userId]
+      properties:
+        userId: { $ref: '#/components/schemas/Id' }
+    ProjectCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 64 }
+        description: { type: string, maxLength: 2000, nullable: true }
+    ProjectUpdateRequest:
+      allOf:
+        - $ref: '#/components/schemas/ProjectCreateRequest'
+        - type: object
+          properties:
+            status: { $ref: '#/components/schemas/ProjectStatus' }
+    TaskCreateRequest:
+      type: object
+      required: [title, groupId, assigneeId, endDate]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 200 }
+        detail: { type: string, maxLength: 10000, nullable: true }
+        groupId: { $ref: '#/components/schemas/Id' }
+        assigneeId: { $ref: '#/components/schemas/Id' }
+        startDate: { type: string, format: date, nullable: true }
+        endDate: { type: string, format: date }
+        status: { $ref: '#/components/schemas/TaskStatus' }
+        priority: { $ref: '#/components/schemas/TaskPriority' }
+    TaskUpdateRequest:
+      type: object
+      minProperties: 1
+      properties:
+        title: { type: string, minLength: 1, maxLength: 200 }
+        detail: { type: string, maxLength: 10000, nullable: true }
+        groupId: { $ref: '#/components/schemas/Id' }
+        assigneeId: { $ref: '#/components/schemas/Id' }
+        startDate: { type: string, format: date, nullable: true }
+        endDate: { type: string, format: date }
+        status: { $ref: '#/components/schemas/TaskStatus' }
+        priority: { $ref: '#/components/schemas/TaskPriority' }
+        expectedUpdatedAt: { type: string, format: date-time }
+    ScheduleUpdateRequest:
+      type: object
+      required: [endDate, expectedUpdatedAt]
+      properties:
+        startDate: { type: string, format: date, nullable: true }
+        endDate: { type: string, format: date }
+        expectedUpdatedAt: { type: string, format: date-time }
+    User:
+      type: object
+      required: [id, username, email, systemRole, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        username: { type: string }
+        email: { type: string, format: email }
+        systemRole: { $ref: '#/components/schemas/SystemRole' }
+        createdAt: { type: string, format: date-time }
+    UserRef:
+      type: object
+      required: [id, username]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        username: { type: string }
+    Team:
+      type: object
+      required: [id, name, status, createdBy, createdAt, updatedAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        status: { $ref: '#/components/schemas/TeamStatus' }
+        createdBy: { $ref: '#/components/schemas/UserRef' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    Group:
+      type: object
+      required: [id, teamId, name, status, memberCount]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        teamId: { $ref: '#/components/schemas/Id' }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        status: { $ref: '#/components/schemas/GroupStatus' }
+        memberCount: { type: integer, minimum: 0 }
+    Member:
+      type: object
+      required: [user, groups]
+      properties:
+        user: { $ref: '#/components/schemas/User' }
+        groups:
+          type: array
+          items: { $ref: '#/components/schemas/Group' }
+    Project:
+      type: object
+      required: [id, teamId, name, status, createdBy, createdAt, updatedAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        teamId: { $ref: '#/components/schemas/Id' }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        status: { $ref: '#/components/schemas/ProjectStatus' }
+        taskCount: { type: integer, minimum: 0 }
+        createdBy: { $ref: '#/components/schemas/UserRef' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    Task:
+      type: object
+      required: [id, projectId, group, title, assignee, endDate, status, priority, renderStartDate, isVirtualStart, updatedAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        projectId: { $ref: '#/components/schemas/Id' }
+        group: { $ref: '#/components/schemas/Group' }
+        title: { type: string }
+        detail: { type: string, nullable: true }
+        assignee: { $ref: '#/components/schemas/UserRef' }
+        startDate: { type: string, format: date, nullable: true }
+        endDate: { type: string, format: date }
+        renderStartDate: { type: string, format: date }
+        isVirtualStart: { type: boolean }
+        status: { $ref: '#/components/schemas/TaskStatus' }
+        priority: { $ref: '#/components/schemas/TaskPriority' }
+        completedAt: { type: string, format: date-time, nullable: true }
+        createdBy: { $ref: '#/components/schemas/UserRef' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    Pagination:
+      type: object
+      required: [page, pageSize, total, totalPages]
+      properties:
+        page: { type: integer }
+        pageSize: { type: integer }
+        total: { type: integer }
+        totalPages: { type: integer }
+    Meta:
+      type: object
+      properties:
+        requestId: { type: string }
+        pagination: { $ref: '#/components/schemas/Pagination' }
+    ErrorEnvelope:
+      type: object
+      required: [error, meta]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+        meta: { $ref: '#/components/schemas/Meta' }
+    SuccessNullEnvelope:
+      type: object
+      required: [data, meta]
+      properties:
+        data: { nullable: true }
+        meta: { $ref: '#/components/schemas/Meta' }
+    AuthEnvelope:
+      type: object
+      properties:
+        data:
+          type: object
+          required: [user, onboardingRequired]
+          properties:
+            user: { $ref: '#/components/schemas/User' }
+            onboardingRequired: { type: boolean }
+        meta: { $ref: '#/components/schemas/Meta' }
+    MeEnvelope:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            user: { $ref: '#/components/schemas/User' }
+            teams:
+              type: array
+              items: { $ref: '#/components/schemas/Team' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    UserEnvelope:
+      type: object
+      properties:
+        data: { $ref: '#/components/schemas/User' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    UserPageEnvelope:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/User' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    TeamEnvelope:
+      type: object
+      properties:
+        data: { $ref: '#/components/schemas/Team' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    TeamListEnvelope:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Team' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    GroupEnvelope:
+      type: object
+      properties:
+        data: { $ref: '#/components/schemas/Group' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    GroupListEnvelope:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Group' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    MemberEnvelope:
+      type: object
+      properties:
+        data: { $ref: '#/components/schemas/Member' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    MemberListEnvelope:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Member' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    GroupMemberListEnvelope:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/UserRef' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    ProjectEnvelope:
+      type: object
+      properties:
+        data: { $ref: '#/components/schemas/Project' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    ProjectPageEnvelope:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Project' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    TaskEnvelope:
+      type: object
+      properties:
+        data: { $ref: '#/components/schemas/Task' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    TaskPageEnvelope:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Task' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    GanttEnvelope:
+      type: object
+      properties:
+        data:
+          type: object
+          required: [project, range, tasks]
+          properties:
+            project: { $ref: '#/components/schemas/Project' }
+            range:
+              type: object
+              properties:
+                startDate: { type: string, format: date }
+                endDate: { type: string, format: date }
+                granularity: { type: string, enum: [day, week, month] }
+            tasks:
+              type: array
+              items: { $ref: '#/components/schemas/Task' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    DashboardEnvelope:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            inProgressProjectCount: { type: integer }
+            visibleTaskCount: { type: integer }
+            myOpenTaskCount: { type: integer }
+            overdueTaskCount: { type: integer }
+            upcomingDeadlineCount: { type: integer }
+            recentProjects:
+              type: array
+              items: { $ref: '#/components/schemas/Project' }
+            upcomingDeadlines:
+              type: array
+              items: { $ref: '#/components/schemas/Task' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    AdminOverviewEnvelope:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            userCount: { type: integer }
+            activeTeamCount: { type: integer }
+            inProgressProjectCount: { type: integer }
+            taskCount: { type: integer }
+        meta: { $ref: '#/components/schemas/Meta' }
