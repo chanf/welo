@@ -73,6 +73,7 @@ const labels = {
 const statuses = { todo: "待办", in_progress: "进行中", done: "已完成" };
 const priorities = { low: "低", medium: "中", high: "高", urgent: "紧急" };
 const state = {
+  authStatus: "checking",
   user: null,
   teams: [],
   team: null,
@@ -162,7 +163,18 @@ function utilities() {
   return '<div class="toast" id="toast" role="status" aria-live="polite"></div><dialog id="dialog" class="modal"></dialog>';
 }
 
+function renderSessionLoading(message = "正在恢复会话...") {
+  root.innerHTML = `<section class="session-screen"><div class="brand"><div class="brand-mark">W</div><span>welo</span></div><div class="session-loading"><span class="session-spinner" aria-hidden="true"></span><p role="status">${esc(message)}</p></div></section>`;
+}
+
+function renderSessionError(message) {
+  state.authStatus = "error";
+  root.innerHTML = `<section class="session-screen"><div class="brand"><div class="brand-mark">W</div><span>welo</span></div><p class="session-error" role="alert">${esc(message)}</p>${button("session-retry", "重试", "refresh-cw")}</section>`;
+  hydrate();
+}
+
 function renderAuth(mode = "login", message = "") {
+  state.authStatus = "unauthenticated";
   root.innerHTML = `<section class="auth-screen show"><div class="auth-layout"><aside class="auth-aside"><div class="brand"><div class="brand-mark">W</div><span>welo</span></div><div class="auth-quote"><h1>Welo</h1><p>让团队的每一步，都清晰发生。</p></div></aside><div class="auth-form"><div class="auth-tabs"><button data-action="login-mode" class="${mode === "login" ? "active" : ""}">登录</button><button data-action="register-mode" class="${mode === "register" ? "active" : ""}">注册</button></div><h2>${mode === "login" ? "欢迎回来" : "创建账号"}</h2><p role="status">${esc(message)}</p><form id="authForm" data-mode="${mode}" class="auth-fields">${mode === "login" ? field("用户名或邮箱", "account", "", "text", 'required autocomplete="username" maxlength="255"') : field("用户名", "username", "", "text", 'required minlength="2" maxlength="32" autocomplete="username"') + field("邮箱", "email", "", "email", 'required autocomplete="email" maxlength="255"')}${field("密码", "password", "", "password", `required ${mode === "register" ? 'minlength="8" autocomplete="new-password"' : 'autocomplete="current-password"'}`)}${mode === "register" ? field("确认密码", "passwordConfirmation", "", "password", 'required minlength="8" autocomplete="new-password"') : ""}<button class="btn-primary" type="submit">${icon("log-in")}${mode === "login" ? "登录" : "注册"}</button></form>${tool("theme", "切换主题", "sun-moon")}</div></div></section>${utilities()}`;
   hydrate();
 }
@@ -188,7 +200,7 @@ function shell() {
 async function initialize() {
   const me = await api.me();
   state.user = { ...me.data.user, id: String(me.data.user.id) };
-  state.teams = (await api.teams()).data.map((x) => ({
+  state.teams = (me.data.teams ?? []).map((x) => ({
     ...x,
     id: String(x.id),
   }));
@@ -204,6 +216,7 @@ async function initialize() {
   if (state.page === "admin" && !admin()) state.page = "workspace";
   state.project = null;
   state.filters = {};
+  state.authStatus = "authenticated";
   shell();
   await loadTeam();
 }
@@ -818,6 +831,7 @@ root.addEventListener("click", (event) => {
   const action = node.dataset.action,
     id = node.dataset.id;
   busy(node, async () => {
+    if (action === "session-retry") restoreSession();
     if (action === "theme") theme();
     if (action === "login-mode" || action === "register-mode")
       renderAuth(action === "login-mode" ? "login" : "register");
@@ -938,7 +952,7 @@ root.addEventListener(
   true,
 );
 window.addEventListener("hashchange", () => {
-  if (state.user) navigate(location.hash.slice(1));
+  if (state.authStatus === "authenticated") navigate(location.hash.slice(1));
 });
 
 let drag = null;
@@ -1040,7 +1054,18 @@ root.addEventListener("pointerup", () => {
   });
 });
 
-renderAuth("login", "正在恢复会话...");
-initialize().catch((error) => {
-  renderAuth("login", error.status === 401 ? "" : errorMessage(error));
-});
+function restoreSession() {
+  state.authStatus = "checking";
+  state.user = null;
+  renderSessionLoading();
+  initialize().catch((error) => {
+    state.user = null;
+    if (error.status === 401) {
+      renderAuth();
+      return;
+    }
+    renderSessionError(errorMessage(error));
+  });
+}
+
+restoreSession();
