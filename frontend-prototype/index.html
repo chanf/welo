@@ -982,6 +982,13 @@
       }
       .gantt {
         overflow-x: auto;
+        cursor: grab;
+        touch-action: pan-y;
+        overscroll-behavior-x: contain;
+      }
+      .gantt.dragging {
+        cursor: grabbing;
+        user-select: none;
       }
       .task-table {
         display: none;
@@ -1034,11 +1041,11 @@
         background: var(--yellow);
       }
       .gantt-inner {
-        min-width: 800px;
+        min-width: max-content;
       }
       .timeline-head {
         display: grid;
-        grid-template-columns: 220px minmax(580px, 1fr);
+        grid-template-columns: 220px auto;
         background: #fbfcfa;
         border-bottom: 1px solid var(--line);
       }
@@ -1049,11 +1056,12 @@
         letter-spacing: 0.5px;
       }
       .days {
-        display: grid;
-        grid-template-columns: repeat(14, 1fr);
+        display: flex;
+        width: max-content;
         position: relative;
       }
       .day {
+        flex: 0 0 auto;
         padding: 11px 5px 9px;
         text-align: center;
         border-left: 1px solid #edf0ed;
@@ -1075,7 +1083,7 @@
       }
       .timeline-row {
         display: grid;
-        grid-template-columns: 220px minmax(580px, 1fr);
+        grid-template-columns: 220px auto;
         min-height: 65px;
         border-bottom: 1px solid #edf0ed;
       }
@@ -1112,14 +1120,14 @@
       }
       .track {
         position: relative;
-        display: grid;
-        grid-template-columns: repeat(14, 1fr);
+        display: block;
+        overflow: hidden;
         background-image: linear-gradient(
           to right,
           #edf0ed 1px,
           transparent 1px
         );
-        background-size: calc(100% / 14) 100%;
+        background-size: 42px 100%;
       }
       .today-line {
         position: absolute;

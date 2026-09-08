@@ -22,6 +22,7 @@ import {
   Trash2,
   UserPlus,
   UserMinus,
+  CalendarDays,
 } from "lucide";
 
 const icons = {
@@ -47,6 +48,7 @@ const icons = {
   Trash2,
   UserPlus,
   UserMinus,
+  CalendarDays,
 };
 import { api } from "./api.js";
 import "./production.css";
@@ -84,6 +86,7 @@ const state = {
   generation: 0,
   tasks: [],
   gantt: null,
+  ganttTimeline: null,
   projectPage: 1,
   taskPage: 1,
   adminPage: 1,
@@ -96,10 +99,27 @@ let toastTimer,
 const admin = () => state.user?.systemRole === "super_admin";
 const writable = () => state.team?.status === "active";
 const taskWritable = () => writable() && state.project?.status === "active";
-const today = () => new Date().toLocaleDateString("en-CA");
+const dateAfter = (days) => {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date.toLocaleDateString("en-CA");
+};
+const today = () => dateAfter(0);
 const dayNumber = (value) => Date.parse(`${value}T00:00:00Z`) / 86400000;
 const addDays = (value, days) =>
   new Date((dayNumber(value) + days) * 86400000).toISOString().slice(0, 10);
+const GANTT_DAY_WIDTH = 42;
+const GANTT_INITIAL_DAYS = 180;
+const GANTT_INITIAL_LEFT_DAYS = 60;
+const GANTT_EXTENSION_DAYS = 120;
+const GANTT_EDGE_DAYS = 21;
+const ganttDates = () =>
+  [
+    today(),
+    state.gantt?.range?.startDate,
+    state.gantt?.range?.endDate,
+    ...state.tasks.flatMap((task) => [task.renderStartDate, task.endDate]),
+  ].filter(Boolean);
 const options = (items, value = "", blank = null) =>
   `${blank === null ? "" : `<option value="">${esc(blank)}</option>`}${items.map((x) => `<option value="${esc(x.id)}" ${String(x.id) === String(value) ? "selected" : ""}>${esc(x.name ?? x.username)}</option>`).join("")}`;
 const enumOptions = (items, value, blank) =>
@@ -334,40 +354,133 @@ async function workspace(gen) {
       .join(
         "",
       )}</section><div class="workspace-grid"><section class="panel"><div class="panel-head"><div><h2>${esc(state.project?.name || "项目排期")}</h2><p>${state.tasks.length} 个可见任务</p></div><div class="head-actions">${projectSelector()}<select id="granularity" class="select" aria-label="时间粒度">${enumOptions({ day: "日", week: "周", month: "月" }, state.filters.granularity || "day")}</select>${tool("toggle-view", "切换甘特图与列表", "list")}</div></div><div id="ganttPanel" class="gantt"></div><div id="scheduleTable" hidden>${table(["任务", "小组", "负责人", "开始", "截止", "状态"], taskRows(state.tasks, true))}</div></section><aside class="side-stack"><section class="panel"><div class="panel-head"><h2>即将到期</h2></div><div class="deadline-list">${d.upcomingDeadlines.map((t) => `<div class="deadline"><div class="date-box"><b>${esc(t.endDate.slice(8))}</b><small>${esc(t.endDate.slice(5, 7))}月</small></div><div class="deadline-name">${esc(t.title)}<small>${esc(t.assignee.username)}</small></div></div>`).join("") || empty("暂无即将到期任务")}</div></section><section class="panel"><div class="panel-head"><h2>团队小组</h2></div><div class="members">${state.groups.map((g) => `<div class="member-row"><div class="avatar green">${esc(g.name.slice(0, 1))}</div><div class="identity">${esc(g.name)}<small>${g.memberCount} 位成员 · ${g.status === "active" ? "正常" : "已停用"}</small></div></div>`).join("") || empty("暂无小组")}</div></section></aside></div>`;
+  $("#granularity")?.insertAdjacentHTML(
+    "afterend",
+    tool("gantt-today", "回到今天", "calendar-days"),
+  );
   drawGantt();
 }
+function resetGanttTimeline() {
+  const dates = ganttDates();
+  const firstDate = dates.reduce((a, b) => (b < a ? b : a));
+  const lastDate = dates.reduce((a, b) => (b > a ? b : a));
+  const startDate = addDays(firstDate, -GANTT_INITIAL_LEFT_DAYS);
+  state.ganttTimeline = {
+    projectId: String(state.project?.id ?? "none"),
+    startDate,
+    days: Math.max(
+      GANTT_INITIAL_DAYS,
+      dayNumber(addDays(lastDate, 45)) - dayNumber(startDate) + 1,
+    ),
+    scrollLeft: 0,
+    extending: false,
+    initialized: false,
+  };
+}
+
+function ensureGanttTimeline() {
+  if (
+    !state.ganttTimeline ||
+    state.ganttTimeline.projectId !== String(state.project?.id ?? "none")
+  ) {
+    resetGanttTimeline();
+    return;
+  }
+
+  const timeline = state.ganttTimeline;
+  const dates = ganttDates();
+  const firstDate = addDays(
+    dates.reduce((a, b) => (b < a ? b : a)),
+    -14,
+  );
+  const lastDate = addDays(
+    dates.reduce((a, b) => (b > a ? b : a)),
+    45,
+  );
+  const currentStart = dayNumber(timeline.startDate);
+  if (dayNumber(firstDate) < currentStart) {
+    const addedDays = currentStart - dayNumber(firstDate);
+    timeline.startDate = firstDate;
+    timeline.days += addedDays;
+  }
+  const requiredDays = dayNumber(lastDate) - dayNumber(timeline.startDate) + 1;
+  timeline.days = Math.max(timeline.days, requiredDays);
+}
+
 function drawGantt() {
   const target = $("#ganttPanel");
   if (!target) return;
   if (!state.gantt || !state.tasks.length) {
+    state.ganttTimeline = null;
     target.innerHTML = empty("暂无任务");
     return;
   }
-  const start = state.gantt.range.startDate,
-    end = state.gantt.range.endDate;
-  const total = Math.max(1, dayNumber(end) - dayNumber(start) + 1);
+
+  ensureGanttTimeline();
+  const timeline = state.ganttTimeline;
+  const start = timeline.startDate;
+  const startDay = dayNumber(start);
+  const total = timeline.days;
+  const timelineWidth = total * GANTT_DAY_WIDTH;
   const step =
     state.filters.granularity === "month"
       ? 30
       : state.filters.granularity === "week"
         ? 7
         : 1;
-  const width = Math.max(580, Math.ceil(total / step) * 42);
-  const ticks = Array.from(
-    { length: Math.ceil(total / step) },
-    (_, i) =>
-      `<div class="day"><strong>${addDays(start, i * step).slice(5)}</strong></div>`,
-  ).join("");
-  target.innerHTML = `<div class="gantt-inner" style="width:${width + 220}px"><div class="timeline-head"><div class="timeline-spacer">任务 / 负责人</div><div class="days" style="grid-template-columns:repeat(${Math.ceil(total / step)},1fr)">${ticks}</div></div>${state.tasks
-    .map((t) => {
-      const left =
-        ((dayNumber(t.renderStartDate) - dayNumber(start)) / total) * 100;
-      const span =
-        ((dayNumber(t.endDate) - dayNumber(t.renderStartDate) + 1) / total) *
-        100;
-      return `<div class="timeline-row"><div class="task-info"><button class="task-title text-link" data-action="task-edit" data-id="${esc(t.id)}">${esc(t.title)}</button><div class="task-meta">${esc(t.group.name)} · ${esc(t.assignee.username)}</div></div><div class="track"><div class="bar ${t.isVirtualStart ? "dashed" : t.status === "done" ? "teal" : t.status === "todo" ? "coral" : "blue"}" data-task-id="${esc(t.id)}" style="left:${left}%;width:${span}%" title="${esc(t.title)}: ${esc(t.startDate || "未设置开始日期")} ~ ${esc(t.endDate)}">${t.isVirtualStart ? "" : '<span class="handle left"></span>'}<span class="bar-label">${esc(t.title)}</span><span class="handle right"></span></div></div></div>`;
+  const currentDay = today();
+  const ticks = Array.from({ length: Math.ceil(total / step) }, (_, index) => {
+    const date = addDays(start, index * step);
+    const span = Math.min(step, total - index * step);
+    const containsToday =
+      currentDay >= date && currentDay < addDays(date, span);
+    return `<div class="day${containsToday ? " today" : ""}" style="width:${span * GANTT_DAY_WIDTH}px"><strong>${date.slice(5)}</strong></div>`;
+  }).join("");
+
+  target.innerHTML = `<div class="gantt-inner" style="width:${timelineWidth + 220}px"><div class="timeline-head" style="grid-template-columns:220px ${timelineWidth}px"><div class="timeline-spacer">任务 / 负责人</div><div class="days" style="width:${timelineWidth}px">${ticks}</div></div>${state.tasks
+    .map((task) => {
+      const taskStart = dayNumber(task.renderStartDate);
+      const taskEnd = dayNumber(task.endDate);
+      let left = (taskStart - startDay) * GANTT_DAY_WIDTH;
+      let width = (taskEnd - taskStart + 1) * GANTT_DAY_WIDTH;
+      if (left < 0) {
+        width += left;
+        left = 0;
+      }
+      width = Math.min(width, timelineWidth - left);
+      const visible = width > 0;
+      return `<div class="timeline-row" style="grid-template-columns:220px ${timelineWidth}px"><div class="task-info"><button class="task-title text-link" data-action="task-edit" data-id="${esc(task.id)}">${esc(task.title)}</button><div class="task-meta">${esc(task.group.name)} · ${esc(task.assignee.username)}</div></div><div class="track">${visible ? `<div class="bar ${task.isVirtualStart ? "dashed" : task.status === "done" ? "teal" : task.status === "todo" ? "coral" : "blue"}" data-task-id="${esc(task.id)}" style="left:${left}px;width:${width}px" title="${esc(task.title)}: ${esc(task.startDate || "未设置开始日期")} ~ ${esc(task.endDate)}">${task.isVirtualStart ? "" : '<span class="handle left"></span>'}<span class="bar-label">${esc(task.title)}</span><span class="handle right"></span></div>` : ""}</div></div>`;
     })
     .join("")}</div>`;
+  if (!timeline.initialized) {
+    timeline.scrollLeft = Math.max(
+      0,
+      (dayNumber(today()) - startDay) * GANTT_DAY_WIDTH -
+        target.clientWidth / 2,
+    );
+    timeline.initialized = true;
+  }
+  target.scrollLeft = timeline.scrollLeft;
+}
+
+function extendGanttTimeline(viewport, direction) {
+  const timeline = state.ganttTimeline;
+  if (!timeline || timeline.extending) return;
+  timeline.extending = true;
+  const previousScrollLeft = viewport.scrollLeft;
+  timeline.days += GANTT_EXTENSION_DAYS;
+  if (direction === "left")
+    timeline.startDate = addDays(timeline.startDate, -GANTT_EXTENSION_DAYS);
+  drawGantt();
+  const target = $("#ganttPanel");
+  target.scrollLeft =
+    direction === "left"
+      ? previousScrollLeft + GANTT_EXTENSION_DAYS * GANTT_DAY_WIDTH
+      : previousScrollLeft;
+  timeline.scrollLeft = target.scrollLeft;
+  if (direction === "left" && ganttPan?.viewport === viewport)
+    ganttPan.startScrollLeft += GANTT_EXTENSION_DAYS * GANTT_DAY_WIDTH;
+  timeline.extending = false;
 }
 function pager(meta, prefix) {
   const p = meta.pagination;
@@ -1022,6 +1135,17 @@ root.addEventListener("click", (event) => {
       $("#ganttPanel").hidden = !$("#ganttPanel").hidden;
       $("#scheduleTable").hidden = !$("#scheduleTable").hidden;
     }
+    if (action === "gantt-today") {
+      const viewport = $("#ganttPanel");
+      const timeline = state.ganttTimeline;
+      if (viewport && timeline)
+        viewport.scrollLeft = Math.max(
+          0,
+          (dayNumber(today()) - dayNumber(timeline.startDate)) *
+            GANTT_DAY_WIDTH -
+            viewport.clientWidth / 2,
+        );
+    }
     if (/^(project|task|admin)-(prev|next)$/.test(action)) {
       const [key, direction] = action.split("-");
       state[`${key}Page`] += direction === "next" ? 1 : -1;
@@ -1094,6 +1218,61 @@ window.addEventListener("hashchange", () => {
 });
 
 let drag = null;
+let ganttPan = null;
+root.addEventListener("pointerdown", (event) => {
+  if (
+    event.button !== 0 ||
+    event.target.closest("button, select, input, textarea, .bar")
+  )
+    return;
+  const viewport = event.target.closest("#ganttPanel");
+  if (!viewport || !state.ganttTimeline) return;
+  ganttPan = {
+    viewport,
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startScrollLeft: viewport.scrollLeft,
+  };
+  viewport.setPointerCapture(event.pointerId);
+  viewport.classList.add("dragging");
+  event.preventDefault();
+});
+root.addEventListener("pointermove", (event) => {
+  if (!ganttPan || event.pointerId !== ganttPan.pointerId) return;
+  const pointerDelta = event.clientX - ganttPan.startX;
+  const nextScrollLeft = ganttPan.startScrollLeft - pointerDelta;
+  if (nextScrollLeft < 0) {
+    extendGanttTimeline(ganttPan.viewport, "left");
+    ganttPan.startScrollLeft = ganttPan.viewport.scrollLeft + pointerDelta;
+  } else ganttPan.viewport.scrollLeft = nextScrollLeft;
+  event.preventDefault();
+});
+const endGanttPan = (event) => {
+  if (!ganttPan || event.pointerId !== ganttPan.pointerId) return;
+  ganttPan.viewport.classList.remove("dragging");
+  if (ganttPan.viewport.hasPointerCapture?.(ganttPan.pointerId))
+    ganttPan.viewport.releasePointerCapture(ganttPan.pointerId);
+  ganttPan = null;
+};
+root.addEventListener("pointerup", endGanttPan);
+root.addEventListener("pointercancel", endGanttPan);
+root.addEventListener(
+  "scroll",
+  (event) => {
+    const viewport = event.target.closest?.("#ganttPanel");
+    const timeline = state.ganttTimeline;
+    if (!viewport || !timeline || timeline.extending) return;
+    timeline.scrollLeft = viewport.scrollLeft;
+    const edgeWidth = GANTT_EDGE_DAYS * GANTT_DAY_WIDTH;
+    if (viewport.scrollLeft <= edgeWidth) extendGanttTimeline(viewport, "left");
+    else if (
+      viewport.scrollLeft + viewport.clientWidth >=
+      viewport.scrollWidth - edgeWidth
+    )
+      extendGanttTimeline(viewport, "right");
+  },
+  true,
+);
 root.addEventListener("pointerdown", (event) => {
   const bar = event.target.closest("[data-task-id]");
   if (!bar || !taskWritable() || bar.dataset.saving || event.button !== 0)
@@ -1121,25 +1300,34 @@ root.addEventListener("pointerdown", (event) => {
 });
 root.addEventListener("pointermove", (event) => {
   if (!drag) return;
-  const total =
-    dayNumber(state.gantt.range.endDate) -
-    dayNumber(state.gantt.range.startDate) +
-    1;
+  const timeline = state.ganttTimeline;
+  const total = timeline.days;
+  const timelineStart = dayNumber(timeline.startDate);
+  const timelineEnd = timelineStart + total - 1;
   let delta = Math.round(
     ((event.clientX - drag.x) / drag.bar.parentElement.clientWidth) * total,
   );
   const duration =
     dayNumber(drag.task.endDate) - dayNumber(drag.task.renderStartDate);
-  if (drag.mode === "left") delta = Math.min(delta, duration);
-  if (drag.mode === "right") delta = Math.max(delta, -duration);
+  const taskStart = dayNumber(drag.task.renderStartDate);
+  const taskEnd = dayNumber(drag.task.endDate);
+  if (drag.mode === "left")
+    delta = Math.min(Math.max(delta, timelineStart - taskStart), duration);
+  else if (drag.mode === "right")
+    delta = Math.max(Math.min(delta, timelineEnd - taskEnd), -duration);
+  else
+    delta = Math.min(
+      Math.max(delta, timelineStart - taskStart),
+      timelineEnd - taskEnd,
+    );
   drag.delta = delta;
   const start = addDays(
       drag.task.renderStartDate,
       drag.mode === "right" ? 0 : delta,
     ),
     end = addDays(drag.task.endDate, drag.mode === "left" ? 0 : delta);
-  drag.bar.style.left = `${((dayNumber(start) - dayNumber(state.gantt.range.startDate)) / total) * 100}%`;
-  drag.bar.style.width = `${((dayNumber(end) - dayNumber(start) + 1) / total) * 100}%`;
+  drag.bar.style.left = `${(dayNumber(start) - timelineStart) * GANTT_DAY_WIDTH}px`;
+  drag.bar.style.width = `${(dayNumber(end) - dayNumber(start) + 1) * GANTT_DAY_WIDTH}px`;
 });
 root.addEventListener("pointercancel", () => {
   drag = null;

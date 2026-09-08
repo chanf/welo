@@ -276,6 +276,8 @@ svg {
 }
 .track {
   display: block;
+  position: relative;
+  overflow: hidden;
   background-size: 42px 100%;
 }
 .bar {
