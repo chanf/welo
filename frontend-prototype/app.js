@@ -23,6 +23,8 @@ import {
   UserPlus,
   UserMinus,
   CalendarDays,
+  Maximize2,
+  Minimize2,
 } from "lucide";
 
 const icons = {
@@ -49,6 +51,8 @@ const icons = {
   UserPlus,
   UserMinus,
   CalendarDays,
+  Maximize2,
+  Minimize2,
 };
 import { api } from "./api.js";
 import "./production.css";
@@ -87,6 +91,7 @@ const state = {
   tasks: [],
   gantt: null,
   ganttTimeline: null,
+  ganttView: "tasks",
   projectPage: 1,
   taskPage: 1,
   adminPage: 1,
@@ -120,6 +125,10 @@ const ganttDates = () =>
     state.gantt?.range?.endDate,
     ...state.tasks.flatMap((task) => [task.renderStartDate, task.endDate]),
   ].filter(Boolean);
+const ganttViewSwitch = () =>
+  `<div class="view-switch gantt-view-switch" role="group" aria-label="甘特图视图"><button type="button" data-action="gantt-view" data-view="tasks" class="${state.ganttView === "tasks" ? "active" : ""}">任务</button><button type="button" data-action="gantt-view" data-view="assignees" class="${state.ganttView === "assignees" ? "active" : ""}">负责人</button></div>`;
+const ganttFullscreenButton = () =>
+  tool("gantt-fullscreen", "全屏显示甘特图", "maximize-2");
 const options = (items, value = "", blank = null) =>
   `${blank === null ? "" : `<option value="">${esc(blank)}</option>`}${items.map((x) => `<option value="${esc(x.id)}" ${String(x.id) === String(value) ? "selected" : ""}>${esc(x.name ?? x.username)}</option>`).join("")}`;
 const enumOptions = (items, value, blank) =>
@@ -356,7 +365,7 @@ async function workspace(gen) {
       )}</section><div class="workspace-grid"><section class="panel"><div class="panel-head"><div><h2>${esc(state.project?.name || "项目排期")}</h2><p>${state.tasks.length} 个可见任务</p></div><div class="head-actions">${projectSelector()}<select id="granularity" class="select" aria-label="时间粒度">${enumOptions({ day: "日", week: "周", month: "月" }, state.filters.granularity || "day")}</select>${tool("toggle-view", "切换甘特图与列表", "list")}</div></div><div id="ganttPanel" class="gantt"></div><div id="scheduleTable" hidden>${table(["任务", "小组", "负责人", "开始", "截止", "状态"], taskRows(state.tasks, true))}</div></section><aside class="side-stack"><section class="panel"><div class="panel-head"><h2>即将到期</h2></div><div class="deadline-list">${d.upcomingDeadlines.map((t) => `<div class="deadline"><div class="date-box"><b>${esc(t.endDate.slice(8))}</b><small>${esc(t.endDate.slice(5, 7))}月</small></div><div class="deadline-name">${esc(t.title)}<small>${esc(t.assignee.username)}</small></div></div>`).join("") || empty("暂无即将到期任务")}</div></section><section class="panel"><div class="panel-head"><h2>团队小组</h2></div><div class="members">${state.groups.map((g) => `<div class="member-row"><div class="avatar green">${esc(g.name.slice(0, 1))}</div><div class="identity">${esc(g.name)}<small>${g.memberCount} 位成员 · ${g.status === "active" ? "正常" : "已停用"}</small></div></div>`).join("") || empty("暂无小组")}</div></section></aside></div>`;
   $("#granularity")?.insertAdjacentHTML(
     "afterend",
-    tool("gantt-today", "回到今天", "calendar-days"),
+    `${ganttViewSwitch()}${tool("gantt-today", "回到今天", "calendar-days")}${ganttFullscreenButton()}`,
   );
   drawGantt();
 }
@@ -407,6 +416,124 @@ function ensureGanttTimeline() {
   timeline.days = Math.max(timeline.days, requiredDays);
 }
 
+const ganttBarClass = (task) =>
+  task.isVirtualStart
+    ? "dashed"
+    : task.status === "done"
+      ? "teal"
+      : task.status === "todo"
+        ? "coral"
+        : "blue";
+
+function ganttBar(task, startDay, timelineWidth, top = 19, conflicted = false) {
+  const taskStart = dayNumber(task.renderStartDate);
+  const taskEnd = dayNumber(task.endDate);
+  let left = (taskStart - startDay) * GANTT_DAY_WIDTH;
+  let width = (taskEnd - taskStart + 1) * GANTT_DAY_WIDTH;
+  if (left < 0) {
+    width += left;
+    left = 0;
+  }
+  width = Math.min(width, timelineWidth - left);
+  if (width <= 0) return "";
+  return `<div class="bar ${ganttBarClass(task)}${conflicted ? " conflict" : ""}" data-task-id="${esc(task.id)}" style="left:${left}px;width:${width}px;top:${top}px" title="${esc(task.title)}: ${esc(task.startDate || "未设置开始日期")} ~ ${esc(task.endDate)}">${task.isVirtualStart ? "" : '<span class="handle left"></span>'}<span class="bar-label">${esc(task.title)}</span><span class="handle right"></span></div>`;
+}
+
+function assigneeGanttRows() {
+  const people = new Map();
+  for (const task of state.tasks) {
+    const id = String(task.assignee.id);
+    if (!people.has(id)) people.set(id, { assignee: task.assignee, tasks: [] });
+    people.get(id).tasks.push(task);
+  }
+  return [...people.values()]
+    .sort((a, b) =>
+      a.assignee.username.localeCompare(b.assignee.username, "zh-Hans-CN"),
+    )
+    .map((person) => {
+      const tasks = [...person.tasks].sort(
+        (a, b) =>
+          dayNumber(a.renderStartDate) - dayNumber(b.renderStartDate) ||
+          dayNumber(a.endDate) - dayNumber(b.endDate),
+      );
+      const conflicts = new Set();
+      for (let i = 0; i < tasks.length; i += 1)
+        for (let j = i + 1; j < tasks.length; j += 1)
+          if (
+            dayNumber(tasks[i].renderStartDate) <=
+              dayNumber(tasks[j].endDate) &&
+            dayNumber(tasks[j].renderStartDate) <= dayNumber(tasks[i].endDate)
+          ) {
+            conflicts.add(tasks[i].id);
+            conflicts.add(tasks[j].id);
+          }
+      const laneEnds = [];
+      const entries = tasks.map((task) => {
+        const start = dayNumber(task.renderStartDate);
+        let lane = laneEnds.findIndex((end) => end < start);
+        if (lane < 0) {
+          lane = laneEnds.length;
+          laneEnds.push(dayNumber(task.endDate));
+        } else laneEnds[lane] = dayNumber(task.endDate);
+        return { task, lane };
+      });
+      return { ...person, entries, laneCount: laneEnds.length, conflicts };
+    });
+}
+
+function taskGanttRows(startDay, timelineWidth) {
+  return state.tasks
+    .map(
+      (task) =>
+        `<div class="timeline-row" style="grid-template-columns:220px ${timelineWidth}px"><div class="task-info"><button class="task-title text-link" data-action="task-edit" data-id="${esc(task.id)}">${esc(task.title)}</button><div class="task-meta">${esc(task.group.name)} · ${esc(task.assignee.username)}</div></div><div class="track">${ganttBar(task, startDay, timelineWidth)}</div></div>`,
+    )
+    .join("");
+}
+
+function assigneeRows(startDay, timelineWidth) {
+  return assigneeGanttRows()
+    .map((person) => {
+      const rowHeight = Math.max(65, person.laneCount * 38 + 18);
+      const conflictCount = person.conflicts.size;
+      return `<div class="timeline-row assignee-row" style="grid-template-columns:220px ${timelineWidth}px;min-height:${rowHeight}px"><div class="person-info"><div class="avatar green">${esc(person.assignee.username.slice(0, 1))}</div><div class="identity"><strong>${esc(person.assignee.username)}</strong><small>${person.tasks.length} 项任务${conflictCount ? ` · <span class="conflict-count">${conflictCount} 项冲突</span>` : ""}</small></div></div><div class="track assignee-track" style="height:${rowHeight}px">${person.entries.map(({ task, lane }) => ganttBar(task, startDay, timelineWidth, 9 + lane * 38, person.conflicts.has(task.id))).join("")}</div></div>`;
+    })
+    .join("");
+}
+
+function updateGanttFullscreenControls() {
+  const panel = $("#ganttPanel");
+  const active =
+    document.fullscreenElement === panel ||
+    panel?.classList.contains("gantt-fallback-fullscreen");
+  document
+    .querySelectorAll('[data-action="gantt-fullscreen"]')
+    .forEach((button) => {
+      const label = active ? "退出全屏" : "全屏显示甘特图";
+      button.setAttribute("aria-label", label);
+      button.setAttribute("title", label);
+      button.innerHTML = icon(active ? "minimize-2" : "maximize-2");
+    });
+  hydrate();
+}
+
+async function toggleGanttFullscreen() {
+  const panel = $("#ganttPanel");
+  if (!panel) return;
+  if (document.fullscreenElement === panel) {
+    await document.exitFullscreen();
+    return;
+  }
+  if (document.fullscreenElement) await document.exitFullscreen();
+  if (panel.requestFullscreen) {
+    try {
+      await panel.requestFullscreen();
+      return;
+    } catch {}
+  }
+  panel.classList.toggle("gantt-fallback-fullscreen");
+  updateGanttFullscreenControls();
+}
+
 function drawGantt() {
   const target = $("#ganttPanel");
   if (!target) return;
@@ -437,21 +564,14 @@ function drawGantt() {
     return `<div class="day${containsToday ? " today" : ""}" style="width:${span * GANTT_DAY_WIDTH}px"><strong>${date.slice(5)}</strong></div>`;
   }).join("");
 
-  target.innerHTML = `<div class="gantt-inner" style="width:${timelineWidth + 220}px"><div class="timeline-head" style="grid-template-columns:220px ${timelineWidth}px"><div class="timeline-spacer">任务 / 负责人</div><div class="days" style="width:${timelineWidth}px">${ticks}</div></div>${state.tasks
-    .map((task) => {
-      const taskStart = dayNumber(task.renderStartDate);
-      const taskEnd = dayNumber(task.endDate);
-      let left = (taskStart - startDay) * GANTT_DAY_WIDTH;
-      let width = (taskEnd - taskStart + 1) * GANTT_DAY_WIDTH;
-      if (left < 0) {
-        width += left;
-        left = 0;
-      }
-      width = Math.min(width, timelineWidth - left);
-      const visible = width > 0;
-      return `<div class="timeline-row" style="grid-template-columns:220px ${timelineWidth}px"><div class="task-info"><button class="task-title text-link" data-action="task-edit" data-id="${esc(task.id)}">${esc(task.title)}</button><div class="task-meta">${esc(task.group.name)} · ${esc(task.assignee.username)}</div></div><div class="track">${visible ? `<div class="bar ${task.isVirtualStart ? "dashed" : task.status === "done" ? "teal" : task.status === "todo" ? "coral" : "blue"}" data-task-id="${esc(task.id)}" style="left:${left}px;width:${width}px" title="${esc(task.title)}: ${esc(task.startDate || "未设置开始日期")} ~ ${esc(task.endDate)}">${task.isVirtualStart ? "" : '<span class="handle left"></span>'}<span class="bar-label">${esc(task.title)}</span><span class="handle right"></span></div>` : ""}</div></div>`;
-    })
-    .join("")}</div>`;
+  const rows =
+    state.ganttView === "assignees"
+      ? assigneeRows(startDay, timelineWidth)
+      : taskGanttRows(startDay, timelineWidth);
+  const heading =
+    state.ganttView === "assignees" ? "负责人 / 任务" : "任务 / 负责人";
+  target.innerHTML = `<div class="gantt-screen-tools">${tool("gantt-fullscreen", "退出全屏", "minimize-2")}</div><div class="gantt-inner" style="width:${timelineWidth + 220}px"><div class="timeline-head" style="grid-template-columns:220px ${timelineWidth}px"><div class="timeline-spacer">${heading}</div><div class="days" style="width:${timelineWidth}px">${ticks}</div></div>${rows}</div>`;
+  updateGanttFullscreenControls();
   if (!timeline.initialized) {
     timeline.scrollLeft = Math.max(
       0,
@@ -649,7 +769,7 @@ async function taskEditor(id) {
   openDialog(
     task ? "编辑任务" : "新建任务",
     field("标题", "title", task?.title, "text", 'required maxlength="200"') +
-      `<label class="field"><span>详细内容</span><textarea name="detail" maxlength="10000">${esc(task?.detail)}</textarea></label><div class="field-grid">${selectField("所属小组", "groupId", options(groups, task?.group.id, "选择小组"))}${selectField("负责人", "assigneeId", '<option value="">先选择小组</option>')}</div><div class="field-grid">${field("开始日期", "startDate", task?.startDate || (task ? "" : today()), "date")}${field("截止日期", "endDate", task?.endDate || (task ? "" : dateAfter(2)), "date", "required")}</div><div class="field-grid">${selectField("状态", "status", enumOptions(statuses, task?.status || "todo"))}${selectField("优先级", "priority", enumOptions(priorities, task?.priority || "medium"))}</div>`,
+      `<label class="field"><span>详细内容</span><textarea class="task-detail" name="detail" maxlength="10000">${esc(task?.detail)}</textarea></label><div class="field-grid">${selectField("所属小组", "groupId", options(groups, task?.group.id, "选择小组"))}${selectField("负责人", "assigneeId", '<option value="">先选择小组</option>')}</div><div class="field-grid">${field("开始日期", "startDate", task?.startDate || (task ? "" : today()), "date")}${field("截止日期", "endDate", task?.endDate || (task ? "" : dateAfter(2)), "date", "required")}</div><div class="field-grid">${selectField("状态", "status", enumOptions(statuses, task?.status || "todo"))}${selectField("优先级", "priority", enumOptions(priorities, task?.priority || "medium"))}</div>`,
     taskWritable()
       ? async (data) => {
           if (data.startDate && data.startDate > data.endDate)
@@ -1091,6 +1211,10 @@ root.addEventListener("change", (event) =>
       state.filters.granularity = node.value;
       await navigate("workspace");
     }
+    if (node.name === "startDate" && node.closest("#dialog") && node.value) {
+      const endDate = $('#dialog [name="endDate"]');
+      if (endDate) endDate.value = addDays(node.value, 3);
+    }
     if (node.name === "groupId" && node.closest("#dialog"))
       await loadAssignees(
         node.value,
@@ -1162,6 +1286,26 @@ root.addEventListener("click", (event) => {
             viewport.clientWidth / 2,
         );
     }
+    if (action === "gantt-fullscreen") await toggleGanttFullscreen();
+    if (
+      action === "gantt-view" &&
+      ["tasks", "assignees"].includes(node.dataset.view)
+    ) {
+      state.ganttView = node.dataset.view;
+      const viewport = $("#ganttPanel");
+      if (state.ganttTimeline)
+        state.ganttTimeline.scrollLeft =
+          viewport?.scrollLeft ?? state.ganttTimeline.scrollLeft;
+      document
+        .querySelectorAll('[data-action="gantt-view"]')
+        .forEach((button) =>
+          button.classList.toggle(
+            "active",
+            button.dataset.view === state.ganttView,
+          ),
+        );
+      drawGantt();
+    }
     if (/^(project|task|admin)-(prev|next)$/.test(action)) {
       const [key, direction] = action.split("-");
       state[`${key}Page`] += direction === "next" ? 1 : -1;
@@ -1220,6 +1364,16 @@ root.addEventListener("click", (event) => {
         },
       );
   });
+});
+document.addEventListener("fullscreenchange", updateGanttFullscreenControls);
+document.addEventListener("keydown", (event) => {
+  if (
+    event.key === "Escape" &&
+    $("#ganttPanel")?.classList.contains("gantt-fallback-fullscreen")
+  ) {
+    $("#ganttPanel").classList.remove("gantt-fallback-fullscreen");
+    updateGanttFullscreenControls();
+  }
 });
 root.addEventListener("dblclick", (event) => {
   const bar = event.target.closest("[data-task-id]");

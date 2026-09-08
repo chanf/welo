@@ -20,6 +20,9 @@ button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
+.field textarea.task-detail {
+  min-height: 164px;
+}
 button:focus-visible,
 a:focus-visible,
 select:focus-visible {
@@ -279,6 +282,73 @@ svg {
   position: relative;
   overflow: hidden;
   background-size: 42px 100%;
+}
+.gantt {
+  position: relative;
+}
+.gantt-screen-tools {
+  display: none;
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  z-index: 5;
+}
+.gantt:fullscreen,
+.gantt.gantt-fallback-fullscreen {
+  width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+  padding: 8px 0 0;
+  background: var(--white);
+  overflow-y: auto;
+}
+.gantt.gantt-fallback-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.gantt:fullscreen .gantt-screen-tools,
+.gantt.gantt-fallback-fullscreen .gantt-screen-tools {
+  display: flex;
+}
+.person-info {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 13px 18px;
+  min-width: 0;
+}
+.person-info .identity {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+.person-info strong,
+.person-info small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.person-info strong {
+  font-size: 12px;
+}
+.person-info small {
+  color: var(--muted);
+  font-size: 10px;
+}
+.assignee-track {
+  min-height: 65px;
+}
+.bar.conflict {
+  outline: 2px solid var(--coral);
+  outline-offset: 1px;
+  box-shadow:
+    0 0 0 3px rgba(234, 112, 91, 0.16),
+    0 3px 7px rgba(40, 60, 50, 0.1);
+}
+.conflict-count {
+  color: var(--coral);
+  font-weight: 600;
 }
 .bar {
   position: absolute;
