@@ -7,6 +7,7 @@ import { hashPassword, randomToken, sha256, verifyPassword } from "./shared/cryp
 import { ApiError, notFound } from "./shared/errors";
 import { fail, ok } from "./shared/response";
 import { isoTimestamp, nextTaskVersion } from "./shared/task-version";
+import { allocateUserColor } from "./shared/user-color";
 
 type App = { Bindings: Env; Variables: { requestId: string; auth: ReturnType<typeof currentAuth> } };
 type AppContext = Context<App>;
@@ -24,8 +25,8 @@ const jsonBody = async <T extends z.ZodType>(c: AppContext, schema: T): Promise<
   if (!parsed.success) throw new ApiError(400, "VALIDATION_ERROR", "请求参数校验失败", parsed.error.issues.map((issue) => ({ field: issue.path.join("."), reason: issue.message })));
   return parsed.data;
 };
-const rowUser = (row: { id: number; username: string; email: string; system_role: "super_admin" | "member"; created_at: string }) => ({
-  id: String(row.id), username: row.username, email: row.email, systemRole: row.system_role, createdAt: row.created_at,
+const rowUser = (row: { id: number; username: string; email: string; color: string; system_role: "super_admin" | "member"; created_at: string }) => ({
+  id: String(row.id), username: row.username, email: row.email, color: row.color, systemRole: row.system_role, createdAt: row.created_at,
 });
 const teamAccess = async (c: AppContext, teamId: number, write = false) => {
   const auth = currentAuth(c);
@@ -70,8 +71,9 @@ app.post("/api/v1/auth/register", async (c) => {
   const email = body.data.email.toLowerCase();
   const exists = await c.env.DB.prepare("SELECT id FROM users WHERE username = ? OR email = ?").bind(body.data.username, email).first();
   if (exists) throw new ApiError(409, "CONFLICT", "用户名或邮箱已存在");
-  const result = await c.env.DB.prepare("INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)").bind(body.data.username, email, await hashPassword(body.data.password)).run();
-  const user = { id: Number(result.meta.last_row_id), username: body.data.username, email, systemRole: "member" as const, createdAt: new Date().toISOString() };
+  const color = await allocateUserColor(c.env.DB);
+  const result = await c.env.DB.prepare("INSERT INTO users (username, email, password_hash, color) VALUES (?, ?, ?, ?)").bind(body.data.username, email, await hashPassword(body.data.password), color).run();
+  const user = { id: Number(result.meta.last_row_id), username: body.data.username, email, color, systemRole: "member" as const, createdAt: new Date().toISOString() };
   const token = randomToken();
   await c.env.DB.prepare("INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, datetime(CURRENT_TIMESTAMP, ?))").bind(await sha256(token), user.id, `+${Number(c.env.SESSION_TTL_DAYS || 14)} days`).run();
   c.header("Set-Cookie", cookieHeader(token, Number(c.env.SESSION_TTL_DAYS || 14) * 86400));
@@ -82,7 +84,7 @@ app.post("/api/v1/auth/login", async (c) => {
   const body = loginSchema.safeParse(await c.req.json().catch(() => null));
   if (!body.success) throw new ApiError(400, "VALIDATION_ERROR", "请求参数校验失败");
   const account = body.data.account.includes("@") ? body.data.account.toLowerCase() : body.data.account;
-  const row = await c.env.DB.prepare("SELECT * FROM users WHERE username = ? OR email = ?").bind(account, account).first<{ id: number; username: string; email: string; password_hash: string; system_role: "super_admin" | "member"; failed_login_count: number; locked_until: string | null; created_at: string }>();
+  const row = await c.env.DB.prepare("SELECT * FROM users WHERE username = ? OR email = ?").bind(account, account).first<{ id: number; username: string; email: string; color: string; password_hash: string; system_role: "super_admin" | "member"; failed_login_count: number; locked_until: string | null; created_at: string }>();
   if (!row) throw new ApiError(401, "INVALID_CREDENTIALS", "账号或密码错误");
   if (row.locked_until && row.locked_until > new Date().toISOString()) throw new ApiError(423, "ACCOUNT_LOCKED", "账号已锁定，请稍后再试");
   if (!(await verifyPassword(body.data.password, row.password_hash))) {
@@ -94,7 +96,7 @@ app.post("/api/v1/auth/login", async (c) => {
   const token = randomToken();
   await c.env.DB.prepare("INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, datetime(CURRENT_TIMESTAMP, ?))").bind(await sha256(token), row.id, `+${Number(c.env.SESSION_TTL_DAYS || 14)} days`).run();
   c.header("Set-Cookie", cookieHeader(token, Number(c.env.SESSION_TTL_DAYS || 14) * 86400));
-  return ok(c, { user: { id: String(row.id), username: row.username, email: row.email, systemRole: row.system_role, createdAt: row.created_at }, onboardingRequired: false });
+  return ok(c, { user: { id: String(row.id), username: row.username, email: row.email, color: row.color, systemRole: row.system_role, createdAt: row.created_at }, onboardingRequired: false });
 });
 
 app.use("/api/v1/*", authRequired);
@@ -135,13 +137,13 @@ app.patch("/api/v1/users/me", async (c) => {
   const conflict = await c.env.DB.prepare("SELECT id FROM users WHERE (username = ? OR email = ?) AND id <> ?").bind(body.username ?? "", email ?? "", auth.user.id).first();
   if (conflict) throw new ApiError(409, "CONFLICT", "用户名或邮箱已存在");
   await c.env.DB.prepare("UPDATE users SET username = COALESCE(?, username), email = COALESCE(?, email), updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(body.username ?? null, email ?? null, auth.user.id).run();
-  const updated = await c.env.DB.prepare("SELECT id, username, email, system_role, created_at FROM users WHERE id = ?").bind(auth.user.id).first<{ id: number; username: string; email: string; system_role: "super_admin" | "member"; created_at: string }>();
+  const updated = await c.env.DB.prepare("SELECT id, username, email, color, system_role, created_at FROM users WHERE id = ?").bind(auth.user.id).first<{ id: number; username: string; email: string; color: string; system_role: "super_admin" | "member"; created_at: string }>();
   return ok(c, updated ? rowUser(updated) : auth.user);
 });
 
 app.get("/api/v1/teams/:teamId", async (c) => {
   const team = await teamAccess(c, id(c.req.param("teamId")));
-  const creator = await c.env.DB.prepare("SELECT id, username, email, system_role, created_at FROM users WHERE id = ?").bind(team.created_by).first<{ id: number; username: string; email: string; system_role: "super_admin" | "member"; created_at: string }>();
+  const creator = await c.env.DB.prepare("SELECT id, username, email, color, system_role, created_at FROM users WHERE id = ?").bind(team.created_by).first<{ id: number; username: string; email: string; color: string; system_role: "super_admin" | "member"; created_at: string }>();
   return ok(c, { id: String(team.id), name: team.name, description: team.description, status: team.status, createdBy: creator ? rowUser(creator) : null, createdAt: team.created_at, updatedAt: team.updated_at });
 });
 
@@ -160,9 +162,9 @@ app.get("/api/v1/teams/:teamId/members", async (c) => {
   const teamId = id(c.req.param("teamId"));
   await teamAccess(c, teamId);
   const members = await c.env.DB.prepare(`
-    SELECT u.id, u.username, u.email, u.system_role, u.created_at
+    SELECT u.id, u.username, u.email, u.color, u.system_role, u.created_at
     FROM users u JOIN team_members tm ON tm.user_id = u.id WHERE tm.team_id = ? ORDER BY u.username
-  `).bind(teamId).all<{ id: number; username: string; email: string; system_role: "super_admin" | "member"; created_at: string }>();
+  `).bind(teamId).all<{ id: number; username: string; email: string; color: string; system_role: "super_admin" | "member"; created_at: string }>();
   return ok(c, members.results.map((member) => ({ user: rowUser(member), groups: [] })));
 });
 
@@ -172,7 +174,7 @@ app.post("/api/v1/teams/:teamId/members", async (c) => {
   await teamAccess(c, teamId, true);
   const body = await jsonBody(c, z.object({ userId: z.string().regex(/^\d+$/) }));
   const userId = id(body.userId);
-  const user = await c.env.DB.prepare("SELECT id, username, email, system_role, created_at FROM users WHERE id = ?").bind(userId).first<{ id: number; username: string; email: string; system_role: "super_admin" | "member"; created_at: string }>();
+  const user = await c.env.DB.prepare("SELECT id, username, email, color, system_role, created_at FROM users WHERE id = ?").bind(userId).first<{ id: number; username: string; email: string; color: string; system_role: "super_admin" | "member"; created_at: string }>();
   if (!user) throw new ApiError(404, "NOT_FOUND", "用户不存在");
   await c.env.DB.prepare("INSERT INTO team_members (team_id, user_id) VALUES (?, ?)").bind(teamId, userId).run();
   return ok(c, { user: rowUser(user), groups: [] }, 201);
@@ -243,7 +245,7 @@ app.post("/api/v1/teams/:teamId/groups/:groupId/members", async (c) => {
   if (!group) throw notFound();
   const body = await jsonBody(c, z.object({ userId: z.string().regex(/^\d+$/) }));
   const userId = id(body.userId);
-  const member = await c.env.DB.prepare("SELECT u.id, u.username, u.email, u.system_role, u.created_at FROM users u JOIN team_members tm ON tm.user_id = u.id WHERE u.id = ? AND tm.team_id = ?").bind(userId, teamId).first<{ id: number; username: string; email: string; system_role: "super_admin" | "member"; created_at: string }>();
+  const member = await c.env.DB.prepare("SELECT u.id, u.username, u.email, u.color, u.system_role, u.created_at FROM users u JOIN team_members tm ON tm.user_id = u.id WHERE u.id = ? AND tm.team_id = ?").bind(userId, teamId).first<{ id: number; username: string; email: string; color: string; system_role: "super_admin" | "member"; created_at: string }>();
   if (!member) throw new ApiError(409, "CONFLICT", "小组成员必须先属于该团队");
   await c.env.DB.prepare("INSERT INTO group_members (group_id, user_id) VALUES (?, ?)").bind(groupId, userId).run();
   return ok(c, { user: rowUser(member), groups: [groupDto({ id: groupId, team_id: teamId, name: "", description: null, status: "active" })] }, 201);
@@ -288,7 +290,7 @@ app.delete("/api/v1/teams/:teamId/groups/:groupId/members/:userId", async (c) =>
 
 const projectDto = (row: { id: number; team_id: number; name: string; description: string | null; status: "active" | "archived"; created_by: number; created_at: string; updated_at: string; task_count?: number }, creator?: ReturnType<typeof rowUser>) => ({
   id: String(row.id), teamId: String(row.team_id), name: row.name, description: row.description, status: row.status, taskCount: Number(row.task_count ?? 0),
-  createdBy: creator ?? { id: String(row.created_by), username: "", email: "", systemRole: "member" as const, createdAt: row.created_at }, createdAt: row.created_at, updatedAt: row.updated_at,
+  createdBy: creator ?? { id: String(row.created_by), username: "", email: "", color: "#2563EB", systemRole: "member" as const, createdAt: row.created_at }, createdAt: row.created_at, updatedAt: row.updated_at,
 });
 
 app.get("/api/v1/teams/:teamId/projects", async (c) => {
@@ -328,7 +330,7 @@ app.post("/api/v1/teams/:teamId/projects", async (c) => {
 
 app.get("/api/v1/teams/:teamId/projects/:projectId", async (c) => {
   const project = await projectAccess(c, id(c.req.param("teamId")), id(c.req.param("projectId")));
-  const creator = await c.env.DB.prepare("SELECT id, username, email, system_role, created_at FROM users WHERE id = ?").bind(project.created_by).first<{ id: number; username: string; email: string; system_role: "super_admin" | "member"; created_at: string }>();
+  const creator = await c.env.DB.prepare("SELECT id, username, email, color, system_role, created_at FROM users WHERE id = ?").bind(project.created_by).first<{ id: number; username: string; email: string; color: string; system_role: "super_admin" | "member"; created_at: string }>();
   const count = await c.env.DB.prepare("SELECT COUNT(*) AS count FROM tasks WHERE project_id = ? AND deleted_at IS NULL").bind(project.id).first<{ count: number }>();
   return ok(c, projectDto({ ...project, task_count: Number(count?.count ?? 0) }, creator ? rowUser(creator) : undefined));
 });
@@ -356,14 +358,14 @@ const taskRow = z.object({
   title: z.string().min(1).max(200), detail: z.string().max(10000).nullable().optional(), groupId: z.string().regex(/^\d+$/),
   assigneeId: z.string().regex(/^\d+$/), startDate: date.nullable().optional(), endDate: date, status: z.enum(["todo", "in_progress", "done"]).optional(), priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
 });
-const taskDto = (row: { id: number; project_id: number; group_id: number; group_team_id: number; group_name: string; group_description: string | null; group_status: "active" | "disabled"; group_member_count: number; title: string; detail: string | null; assignee_id: number; assignee_name: string; start_date: string | null; end_date: string; status: "todo" | "in_progress" | "done"; priority: "low" | "medium" | "high" | "urgent"; completed_at: string | null; created_by: number; creator_name: string; created_at: string; updated_at: string }) => ({
+const taskDto = (row: { id: number; project_id: number; group_id: number; group_team_id: number; group_name: string; group_description: string | null; group_status: "active" | "disabled"; group_member_count: number; title: string; detail: string | null; assignee_id: number; assignee_name: string; assignee_color: string; start_date: string | null; end_date: string; status: "todo" | "in_progress" | "done"; priority: "low" | "medium" | "high" | "urgent"; completed_at: string | null; created_by: number; creator_name: string; created_at: string; updated_at: string }) => ({
   id: String(row.id), projectId: String(row.project_id), group: { id: String(row.group_id), name: row.group_name, status: row.group_status, teamId: String(row.group_team_id), description: row.group_description, memberCount: Number(row.group_member_count) },
-  title: row.title, detail: row.detail, assignee: { id: String(row.assignee_id), username: row.assignee_name }, startDate: row.start_date, endDate: row.end_date, renderStartDate: row.start_date ?? row.end_date, isVirtualStart: row.start_date === null, status: row.status, priority: row.priority, completedAt: row.completed_at, createdBy: { id: String(row.created_by), username: row.creator_name }, createdAt: isoTimestamp(row.created_at), updatedAt: isoTimestamp(row.updated_at),
+  title: row.title, detail: row.detail, assignee: { id: String(row.assignee_id), username: row.assignee_name, color: row.assignee_color }, startDate: row.start_date, endDate: row.end_date, renderStartDate: row.start_date ?? row.end_date, isVirtualStart: row.start_date === null, status: row.status, priority: row.priority, completedAt: row.completed_at, createdBy: { id: String(row.created_by), username: row.creator_name }, createdAt: isoTimestamp(row.created_at), updatedAt: isoTimestamp(row.updated_at),
 });
 const taskSelect = `
   SELECT t.*, g.team_id AS group_team_id, g.name AS group_name, g.description AS group_description, g.status AS group_status,
     (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = g.id) AS group_member_count,
-    a.username AS assignee_name, u.username AS creator_name
+    a.username AS assignee_name, a.color AS assignee_color, u.username AS creator_name
   FROM tasks t JOIN team_groups g ON g.id = t.group_id JOIN users a ON a.id = t.assignee_id JOIN users u ON u.id = t.created_by
 `;
 const visibleTask = async (c: AppContext, teamId: number, projectId: number, taskId: number) => {
@@ -546,7 +548,7 @@ app.get("/api/v1/admin/users", async (c) => {
   if (keyword) { clauses.push("(username LIKE ? OR email LIKE ?)"); params.push(`%${keyword}%`, `%${keyword}%`); }
   if (role === "member" || role === "super_admin") { clauses.push("system_role = ?"); params.push(role); }
   const count = await c.env.DB.prepare(`SELECT COUNT(*) AS count FROM users WHERE ${clauses.join(" AND ")}`).bind(...params).first<{ count: number }>();
-  const rows = await c.env.DB.prepare(`SELECT id, username, email, system_role, created_at FROM users WHERE ${clauses.join(" AND ")} ORDER BY id DESC LIMIT ? OFFSET ?`).bind(...params, pageSize, (page - 1) * pageSize).all<{ id: number; username: string; email: string; system_role: "super_admin" | "member"; created_at: string }>();
+  const rows = await c.env.DB.prepare(`SELECT id, username, email, color, system_role, created_at FROM users WHERE ${clauses.join(" AND ")} ORDER BY id DESC LIMIT ? OFFSET ?`).bind(...params, pageSize, (page - 1) * pageSize).all<{ id: number; username: string; email: string; color: string; system_role: "super_admin" | "member"; created_at: string }>();
   return ok(c, rows.results.map(rowUser), 200, { page, pageSize, total: Number(count?.count ?? 0), totalPages: Math.ceil(Number(count?.count ?? 0) / pageSize) });
 });
 
@@ -558,7 +560,7 @@ app.patch("/api/v1/admin/users/:userId/role", async (c) => {
   if (!user) throw notFound();
   if (userId === currentAuth(c).user.id && body.systemRole !== "super_admin") throw new ApiError(409, "CONFLICT", "不能撤销当前账号的超级管理员权限");
   await c.env.DB.prepare("UPDATE users SET system_role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(body.systemRole, userId).run();
-  const updated = await c.env.DB.prepare("SELECT id, username, email, system_role, created_at FROM users WHERE id = ?").bind(userId).first<{ id: number; username: string; email: string; system_role: "super_admin" | "member"; created_at: string }>();
+  const updated = await c.env.DB.prepare("SELECT id, username, email, color, system_role, created_at FROM users WHERE id = ?").bind(userId).first<{ id: number; username: string; email: string; color: string; system_role: "super_admin" | "member"; created_at: string }>();
   return ok(c, updated ? rowUser(updated) : null);
 });
 

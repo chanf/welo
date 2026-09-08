@@ -1081,6 +1081,26 @@
       .day.today strong {
         color: var(--coral);
       }
+      .day.day-daily {
+        display: grid;
+        place-items: center;
+        align-content: center;
+        min-height: 54px;
+        padding: 6px 3px;
+      }
+      .day-daily .day-date {
+        margin-top: 0;
+        line-height: 1.05;
+      }
+      .day-daily .day-weekday {
+        margin-top: 4px;
+        color: var(--label);
+        font:
+          10px "Noto Sans SC",
+          sans-serif;
+        line-height: 1;
+        white-space: nowrap;
+      }
       .timeline-row {
         display: grid;
         grid-template-columns: 220px auto;

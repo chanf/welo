@@ -2,7 +2,7 @@ import type { Context, MiddlewareHandler } from "hono";
 import { ApiError } from "./errors";
 import { sha256 } from "./crypto";
 
-export type AuthUser = { id: number; username: string; email: string; systemRole: "super_admin" | "member"; createdAt: string };
+export type AuthUser = { id: number; username: string; email: string; color: string; systemRole: "super_admin" | "member"; createdAt: string };
 export type AuthContext = { user: AuthUser; tokenHash: string };
 
 type AuthApp = { Bindings: Env; Variables: { requestId: string; auth: AuthContext } };
@@ -14,12 +14,12 @@ export const authRequired: MiddlewareHandler<AuthApp> = async (c, next) => {
   if (!token) throw new ApiError(401, "UNAUTHENTICATED", "请先登录");
   const tokenHash = await sha256(token);
   const row = await c.env.DB.prepare(`
-    SELECT u.id, u.username, u.email, u.system_role, u.created_at, s.token_hash
+    SELECT u.id, u.username, u.email, u.color, u.system_role, u.created_at, s.token_hash
     FROM sessions s JOIN users u ON u.id = s.user_id
     WHERE s.token_hash = ? AND s.expires_at > CURRENT_TIMESTAMP
-  `).bind(tokenHash).first<{ id: number; username: string; email: string; system_role: AuthUser["systemRole"]; created_at: string; token_hash: string }>();
+  `).bind(tokenHash).first<{ id: number; username: string; email: string; color: string; system_role: AuthUser["systemRole"]; created_at: string; token_hash: string }>();
   if (!row) throw new ApiError(401, "UNAUTHENTICATED", "登录已失效");
-  c.set("auth", { tokenHash, user: { id: row.id, username: row.username, email: row.email, systemRole: row.system_role, createdAt: row.created_at } });
+  c.set("auth", { tokenHash, user: { id: row.id, username: row.username, email: row.email, color: row.color, systemRole: row.system_role, createdAt: row.created_at } });
   await next();
 };
 

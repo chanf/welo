@@ -346,6 +346,13 @@ svg {
     0 0 0 3px rgba(234, 112, 91, 0.16),
     0 3px 7px rgba(40, 60, 50, 0.1);
 }
+.bar.colored:not(.dashed) {
+  background: var(--bar-color);
+}
+.bar.dashed.colored {
+  border-color: var(--bar-color);
+  color: var(--bar-color);
+}
 .conflict-count {
   color: var(--coral);
   font-weight: 600;

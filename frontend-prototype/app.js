@@ -113,11 +113,29 @@ const today = () => dateAfter(0);
 const dayNumber = (value) => Date.parse(`${value}T00:00:00Z`) / 86400000;
 const addDays = (value, days) =>
   new Date((dayNumber(value) + days) * 86400000).toISOString().slice(0, 10);
+const weekdayName = (value) =>
+  ["日", "一", "二", "三", "四", "五", "六"][
+    new Date(`${value}T00:00:00Z`).getUTCDay()
+  ];
 const GANTT_DAY_WIDTH = 42;
 const GANTT_INITIAL_DAYS = 180;
 const GANTT_INITIAL_LEFT_DAYS = 60;
 const GANTT_EXTENSION_DAYS = 120;
 const GANTT_EDGE_DAYS = 21;
+const GANTT_TASK_COLORS = [
+  "#2563EB",
+  "#DC2626",
+  "#059669",
+  "#D97706",
+  "#7C3AED",
+  "#0891B2",
+  "#DB2777",
+  "#65A30D",
+  "#EA580C",
+  "#0F766E",
+  "#9333EA",
+  "#BE123C",
+];
 const ganttDates = () =>
   [
     today(),
@@ -129,6 +147,14 @@ const ganttViewSwitch = () =>
   `<div class="view-switch gantt-view-switch" role="group" aria-label="甘特图视图"><button type="button" data-action="gantt-view" data-view="tasks" class="${state.ganttView === "tasks" ? "active" : ""}">任务</button><button type="button" data-action="gantt-view" data-view="assignees" class="${state.ganttView === "assignees" ? "active" : ""}">负责人</button></div>`;
 const ganttFullscreenButton = () =>
   tool("gantt-fullscreen", "全屏显示甘特图", "maximize-2");
+const ganttColor = (value, fallback = GANTT_TASK_COLORS[0]) =>
+  /^#[0-9A-F]{6}$/i.test(value ?? "") ? value : fallback;
+const taskColor = (task) => {
+  let hash = 0;
+  for (const character of String(task.id))
+    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  return GANTT_TASK_COLORS[hash % GANTT_TASK_COLORS.length];
+};
 const options = (items, value = "", blank = null) =>
   `${blank === null ? "" : `<option value="">${esc(blank)}</option>`}${items.map((x) => `<option value="${esc(x.id)}" ${String(x.id) === String(value) ? "selected" : ""}>${esc(x.name ?? x.username)}</option>`).join("")}`;
 const enumOptions = (items, value, blank) =>
@@ -425,7 +451,14 @@ const ganttBarClass = (task) =>
         ? "coral"
         : "blue";
 
-function ganttBar(task, startDay, timelineWidth, top = 19, conflicted = false) {
+function ganttBar(
+  task,
+  startDay,
+  timelineWidth,
+  color,
+  top = 19,
+  conflicted = false,
+) {
   const taskStart = dayNumber(task.renderStartDate);
   const taskEnd = dayNumber(task.endDate);
   let left = (taskStart - startDay) * GANTT_DAY_WIDTH;
@@ -436,7 +469,8 @@ function ganttBar(task, startDay, timelineWidth, top = 19, conflicted = false) {
   }
   width = Math.min(width, timelineWidth - left);
   if (width <= 0) return "";
-  return `<div class="bar ${ganttBarClass(task)}${conflicted ? " conflict" : ""}" data-task-id="${esc(task.id)}" style="left:${left}px;width:${width}px;top:${top}px" title="${esc(task.title)}: ${esc(task.startDate || "未设置开始日期")} ~ ${esc(task.endDate)}">${task.isVirtualStart ? "" : '<span class="handle left"></span>'}<span class="bar-label">${esc(task.title)}</span><span class="handle right"></span></div>`;
+  const barColor = ganttColor(color);
+  return `<div class="bar ${ganttBarClass(task)} colored${conflicted ? " conflict" : ""}" data-task-id="${esc(task.id)}" style="--bar-color:${barColor};left:${left}px;width:${width}px;top:${top}px" title="${esc(task.title)}: ${esc(task.startDate || "未设置开始日期")} ~ ${esc(task.endDate)}">${task.isVirtualStart ? "" : '<span class="handle left"></span>'}<span class="bar-label">${esc(task.title)}</span><span class="handle right"></span></div>`;
 }
 
 function assigneeGanttRows() {
@@ -485,7 +519,7 @@ function taskGanttRows(startDay, timelineWidth) {
   return state.tasks
     .map(
       (task) =>
-        `<div class="timeline-row" style="grid-template-columns:220px ${timelineWidth}px"><div class="task-info"><button class="task-title text-link" data-action="task-edit" data-id="${esc(task.id)}">${esc(task.title)}</button><div class="task-meta">${esc(task.group.name)} · ${esc(task.assignee.username)}</div></div><div class="track">${ganttBar(task, startDay, timelineWidth)}</div></div>`,
+        `<div class="timeline-row" style="grid-template-columns:220px ${timelineWidth}px"><div class="task-info"><button class="task-title text-link" data-action="task-edit" data-id="${esc(task.id)}">${esc(task.title)}</button><div class="task-meta">${esc(task.group.name)} · ${esc(task.assignee.username)}</div></div><div class="track">${ganttBar(task, startDay, timelineWidth, task.assignee.color)}</div></div>`,
     )
     .join("");
 }
@@ -495,7 +529,8 @@ function assigneeRows(startDay, timelineWidth) {
     .map((person) => {
       const rowHeight = Math.max(65, person.laneCount * 38 + 18);
       const conflictCount = person.conflicts.size;
-      return `<div class="timeline-row assignee-row" style="grid-template-columns:220px ${timelineWidth}px;min-height:${rowHeight}px"><div class="person-info"><div class="avatar green">${esc(person.assignee.username.slice(0, 1))}</div><div class="identity"><strong>${esc(person.assignee.username)}</strong><small>${person.tasks.length} 项任务${conflictCount ? ` · <span class="conflict-count">${conflictCount} 项冲突</span>` : ""}</small></div></div><div class="track assignee-track" style="height:${rowHeight}px">${person.entries.map(({ task, lane }) => ganttBar(task, startDay, timelineWidth, 9 + lane * 38, person.conflicts.has(task.id))).join("")}</div></div>`;
+      const personColor = ganttColor(person.assignee.color, "#167C68");
+      return `<div class="timeline-row assignee-row" style="grid-template-columns:220px ${timelineWidth}px;min-height:${rowHeight}px"><div class="person-info"><div class="avatar" style="background:${personColor}">${esc(person.assignee.username.slice(0, 1))}</div><div class="identity"><strong>${esc(person.assignee.username)}</strong><small>${person.tasks.length} 项任务${conflictCount ? ` · <span class="conflict-count">${conflictCount} 项冲突</span>` : ""}</small></div></div><div class="track assignee-track" style="height:${rowHeight}px">${person.entries.map(({ task, lane }) => ganttBar(task, startDay, timelineWidth, taskColor(task), 9 + lane * 38, person.conflicts.has(task.id))).join("")}</div></div>`;
     })
     .join("");
 }
@@ -556,12 +591,16 @@ function drawGantt() {
         ? 7
         : 1;
   const currentDay = today();
+  const isDailyView = step === 1;
   const ticks = Array.from({ length: Math.ceil(total / step) }, (_, index) => {
     const date = addDays(start, index * step);
     const span = Math.min(step, total - index * step);
     const containsToday =
       currentDay >= date && currentDay < addDays(date, span);
-    return `<div class="day${containsToday ? " today" : ""}" style="width:${span * GANTT_DAY_WIDTH}px"><strong>${date.slice(5)}</strong></div>`;
+    const label = isDailyView
+      ? `<strong class="day-date">${date.slice(8)}</strong><span class="day-weekday">周${weekdayName(date)}</span>`
+      : `<strong>${date.slice(5)}</strong>`;
+    return `<div class="day${isDailyView ? " day-daily" : ""}${containsToday ? " today" : ""}" style="width:${span * GANTT_DAY_WIDTH}px" title="${date}" aria-label="${date}，周${weekdayName(date)}">${label}</div>`;
   }).join("");
 
   const rows =

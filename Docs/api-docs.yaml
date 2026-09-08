@@ -798,11 +798,12 @@ components:
         expectedUpdatedAt: { type: string, format: date-time }
     User:
       type: object
-      required: [id, username, email, systemRole, createdAt]
+      required: [id, username, email, color, systemRole, createdAt]
       properties:
         id: { $ref: '#/components/schemas/Id' }
         username: { type: string }
         email: { type: string, format: email }
+        color: { type: string, pattern: '^#[0-9A-Fa-f]{6}$', description: 用户甘特图标识色 }
         systemRole: { $ref: '#/components/schemas/SystemRole' }
         createdAt: { type: string, format: date-time }
     UserRef:
@@ -869,7 +870,13 @@ components:
         group: { $ref: '#/components/schemas/Group' }
         title: { type: string }
         detail: { type: string, nullable: true }
-        assignee: { $ref: '#/components/schemas/UserRef' }
+        assignee:
+          allOf:
+            - $ref: '#/components/schemas/UserRef'
+            - type: object
+              required: [color]
+              properties:
+                color: { type: string, pattern: '^#[0-9A-Fa-f]{6}$' }
         startDate: { type: string, format: date, nullable: true }
         endDate: { type: string, format: date }
         renderStartDate: { type: string, format: date }
