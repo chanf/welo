@@ -224,6 +224,10 @@ const ganttTaskBounds = (task) => {
 };
 const ganttViewSwitch = () =>
   `<div class="view-switch gantt-view-switch" role="group" aria-label="甘特图视图"><button type="button" data-action="gantt-view" data-view="tasks" class="${state.ganttView === "tasks" ? "active" : ""}">任务</button><button type="button" data-action="gantt-view" data-view="assignees" class="${state.ganttView === "assignees" ? "active" : ""}">负责人</button></div>`;
+const granularitySwitch = () => {
+  const g = state.filters.granularity || "day";
+  return `<div class="view-switch granularity-switch" role="radiogroup" aria-label="时间粒度"><button type="button" role="radio" aria-checked="${g === "hour"}" data-action="granularity-change" data-granularity="hour" class="${g === "hour" ? "active" : ""}">小时</button><button type="button" role="radio" aria-checked="${g === "halfDay"}" data-action="granularity-change" data-granularity="halfDay" class="${g === "halfDay" ? "active" : ""}">半天</button><button type="button" role="radio" aria-checked="${g === "day"}" data-action="granularity-change" data-granularity="day" class="${g === "day" ? "active" : ""}">天</button></div>`;
+};
 const ganttFullscreenButton = () =>
   tool("gantt-fullscreen", "全屏显示甘特图", "maximize-2");
 const ganttColor = (value, fallback = GANTT_TASK_COLORS[0]) =>
@@ -467,11 +471,7 @@ async function workspace(gen) {
       )
       .join(
         "",
-      )}</section><div class="workspace-grid"><section class="panel"><div class="panel-head"><div><h2>${esc(state.project?.name || "项目排期")}</h2><p>${state.tasks.length} 个可见任务</p></div><div class="head-actions">${projectSelector()}<select id="granularity" class="select" aria-label="时间粒度">${enumOptions({ hour: "小时", halfDay: "半天", day: "天" }, state.filters.granularity || "day")}</select>${tool("toggle-view", "切换甘特图与列表", "list")}</div></div><div id="ganttPanel" class="gantt"></div><div id="scheduleTable" hidden>${table(["任务", "小组", "负责人", "开始", "截止", "状态"], taskRows(state.tasks, true))}</div></section><aside class="side-stack"><section class="panel"><div class="panel-head"><h2>即将到期</h2></div><div class="deadline-list">${d.upcomingDeadlines.map((t) => `<div class="deadline"><div class="date-box"><b>${esc(t.endDate.slice(8, 10))}</b><small>${esc(t.endDate.slice(5, 7))}月</small></div><div class="deadline-name">${esc(t.title)}<small>${esc(t.assignee.username)}</small></div></div>`).join("") || empty("暂无即将到期任务")}</div></section><section class="panel"><div class="panel-head"><h2>团队小组</h2></div><div class="members">${state.groups.map((g) => `<div class="member-row"><div class="avatar green">${esc(g.name.slice(0, 1))}</div><div class="identity">${esc(g.name)}<small>${g.memberCount} 位成员 · ${g.status === "active" ? "正常" : "已停用"}</small></div></div>`).join("") || empty("暂无小组")}</div></section></aside></div>`;
-  $("#granularity")?.insertAdjacentHTML(
-    "afterend",
-    `${ganttViewSwitch()}${tool("gantt-today", "回到今天", "calendar-days")}${ganttFullscreenButton()}`,
-  );
+      )}</section><div class="workspace-grid"><section class="panel"><div class="panel-head"><div><h2>${esc(state.project?.name || "项目排期")}</h2><p>${state.tasks.length} 个可见任务</p></div><div class="head-actions">${projectSelector()}${granularitySwitch()}${tool("toggle-view", "切换甘特图与列表", "list")}${ganttViewSwitch()}${tool("gantt-today", "回到今天", "calendar-days")}${ganttFullscreenButton()}</div></div><div id="ganttPanel" class="gantt"></div><div id="scheduleTable" hidden>${table(["任务", "小组", "负责人", "开始", "截止", "状态"], taskRows(state.tasks, true))}</div></section><aside class="side-stack"><section class="panel"><div class="panel-head"><h2>即将到期</h2></div><div class="deadline-list">${d.upcomingDeadlines.map((t) => `<div class="deadline"><div class="date-box"><b>${esc(t.endDate.slice(8, 10))}</b><small>${esc(t.endDate.slice(5, 7))}月</small></div><div class="deadline-name">${esc(t.title)}<small>${esc(t.assignee.username)}</small></div></div>`).join("") || empty("暂无即将到期任务")}</div></section><section class="panel"><div class="panel-head"><h2>团队小组</h2></div><div class="members">${state.groups.map((g) => `<div class="member-row"><div class="avatar green">${esc(g.name.slice(0, 1))}</div><div class="identity">${esc(g.name)}<small>${g.memberCount} 位成员 · ${g.status === "active" ? "正常" : "已停用"}</small></div></div>`).join("") || empty("暂无小组")}</div></section></aside></div>`;
   drawGantt();
 }
 function resetGanttTimeline() {
@@ -1383,10 +1383,6 @@ root.addEventListener("change", (event) =>
       await navigate(state.page);
     }
     if (node.id === "mobileNav") await navigate(node.value);
-    if (node.id === "granularity") {
-      state.filters.granularity = node.value;
-      await navigate("workspace");
-    }
     if (node.name === "startDate" && node.closest("#dialog") && node.value) {
       const endDate = $('#dialog [name="endDate"]');
       if (endDate) endDate.value = addDays(node.value, 3);
@@ -1484,6 +1480,18 @@ root.addEventListener("click", (event) => {
           ),
         );
       drawGantt();
+    }
+    if (action === "granularity-change" && node.dataset.granularity) {
+      state.filters.granularity = node.dataset.granularity;
+      document
+        .querySelectorAll('[data-action="granularity-change"]')
+        .forEach((button) =>
+          button.classList.toggle(
+            "active",
+            button.dataset.granularity === state.filters.granularity,
+          ),
+        );
+      await navigate("workspace");
     }
     if (/^(project|task|admin)-(prev|next)$/.test(action)) {
       const [key, direction] = action.split("-");
