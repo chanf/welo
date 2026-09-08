@@ -606,22 +606,23 @@ function taskGanttRows(
   pixelsPerHalfHour,
   timelineWidth,
   config,
+  dayWidth,
 ) {
   return state.tasks
     .map(
       (task) =>
-        `<div class="timeline-row" style="grid-template-columns:220px ${timelineWidth}px"><div class="task-info"><button class="task-title text-link" data-action="task-edit" data-id="${esc(task.id)}">${esc(task.title)}</button><div class="task-meta">${esc(task.group.name)} · ${esc(task.assignee.username)}</div></div><div class="track granularity-${esc(state.filters.granularity || "day")}" style="--gantt-day-width:${config.dayWidth}px">${ganttBar(task, timelineStart, pixelsPerHalfHour, timelineWidth, task.assignee.color)}</div></div>`,
+        `<div class="timeline-row" style="grid-template-columns:220px ${timelineWidth}px"><div class="task-info"><button class="task-title text-link" data-action="task-edit" data-id="${esc(task.id)}">${esc(task.title)}</button><div class="task-meta">${esc(task.group.name)} · ${esc(task.assignee.username)}</div></div><div class="track granularity-${esc(state.filters.granularity || "day")}" style="--gantt-day-width:${dayWidth}px">${ganttBar(task, timelineStart, pixelsPerHalfHour, timelineWidth, task.assignee.color)}</div></div>`,
     )
     .join("");
 }
 
-function assigneeRows(timelineStart, pixelsPerHalfHour, timelineWidth, config) {
+function assigneeRows(timelineStart, pixelsPerHalfHour, timelineWidth, config, dayWidth) {
   return assigneeGanttRows()
     .map((person) => {
       const rowHeight = Math.max(65, person.laneCount * 38 + 18);
       const conflictCount = person.conflicts.size;
       const personColor = ganttColor(person.assignee.color, "#167C68");
-      return `<div class="timeline-row assignee-row" style="grid-template-columns:220px ${timelineWidth}px;min-height:${rowHeight}px"><div class="person-info"><div class="avatar" style="background:${personColor}">${esc(person.assignee.username.slice(0, 1))}</div><div class="identity"><strong>${esc(person.assignee.username)}</strong><small>${person.tasks.length} 项任务${conflictCount ? ` · <span class="conflict-count">${conflictCount} 项冲突</span>` : ""}</small></div></div><div class="track assignee-track granularity-${esc(state.filters.granularity || "day")}" style="--gantt-day-width:${config.dayWidth}px;height:${rowHeight}px">${person.entries.map(({ task, lane }) => ganttBar(task, timelineStart, pixelsPerHalfHour, timelineWidth, taskColor(task), 9 + lane * 38, person.conflicts.has(task.id))).join("")}</div></div>`;
+      return `<div class="timeline-row assignee-row" style="grid-template-columns:220px ${timelineWidth}px;min-height:${rowHeight}px"><div class="person-info"><div class="avatar" style="background:${personColor}">${esc(person.assignee.username.slice(0, 1))}</div><div class="identity"><strong>${esc(person.assignee.username)}</strong><small>${person.tasks.length} 项任务${conflictCount ? ` · <span class="conflict-count">${conflictCount} 项冲突</span>` : ""}</small></div></div><div class="track assignee-track granularity-${esc(state.filters.granularity || "day")}" style="--gantt-day-width:${dayWidth}px;height:${rowHeight}px">${person.entries.map(({ task, lane }) => ganttBar(task, timelineStart, pixelsPerHalfHour, timelineWidth, taskColor(task), 9 + lane * 38, person.conflicts.has(task.id))).join("")}</div></div>`;
     })
     .join("");
 }
@@ -660,7 +661,7 @@ async function toggleGanttFullscreen() {
   updateGanttFullscreenControls();
 }
 
-function ganttHeader(startDate, days, config) {
+function ganttHeader(startDate, days, config, dayWidth) {
   const granularity = state.filters.granularity || "day";
   const now = nowTaskDateTime();
   const definitions =
@@ -693,12 +694,12 @@ function ganttHeader(startDate, days, config) {
     const cells = Array.from({ length: days }, (_, index) => {
       const date = addDays(startDate, index);
       const isToday = date === now.slice(0, 10);
-      return `<div class="gantt-cell day-cell${isToday ? " current" : ""}" style="width:${config.dayWidth}px" title="${date}" aria-label="${date}，周${weekdayName(date)}"><strong>${date.slice(5)}</strong><span>周${weekdayName(date)}</span></div>`;
+      return `<div class="gantt-cell day-cell${isToday ? " current" : ""}" style="width:${dayWidth}px" title="${date}" aria-label="${date}，周${weekdayName(date)}"><strong>${date.slice(5)}</strong><span>周${weekdayName(date)}</span></div>`;
     }).join("");
     return `<div class="timeline-cells granularity-day">${cells}</div>`;
   }
 
-  const cellWidth = config.dayWidth / (granularity === "hour" ? 24 : 2);
+  const cellWidth = dayWidth / (granularity === "hour" ? 24 : 2);
   const groups = Array.from({ length: days }, (_, index) => {
     const date = addDays(startDate, index);
     const isToday = date === now.slice(0, 10);
@@ -708,11 +709,23 @@ function ganttHeader(startDate, days, config) {
           `<div class="gantt-cell${cell.active ? " current" : ""}" style="width:${cellWidth}px" aria-label="${date} ${cell.ariaLabel}">${cell.label}</div>`,
       )
       .join("");
-    return `<div class="day-group${isToday ? " today" : ""}" style="width:${config.dayWidth}px"><div class="day-group-label"><strong>${date.slice(5)}</strong><span>周${weekdayName(date)}</span></div><div class="day-cells">${cells}</div></div>`;
+    return `<div class="day-group${isToday ? " today" : ""}" style="width:${dayWidth}px"><div class="day-group-label"><strong>${date.slice(5)}</strong><span>周${weekdayName(date)}</span></div><div class="day-cells">${cells}</div></div>`;
   }).join("");
   return `<div class="timeline-cells granularity-${granularity}">${groups}</div>`;
 }
 
+function responsiveDayWidth() {
+  const target = $("#ganttPanel");
+  if (!target) return ganttConfig().dayWidth;
+  const containerWidth = target.clientWidth;
+  const timeline = state.ganttTimeline;
+  if (!timeline || !containerWidth) return ganttConfig().dayWidth;
+  const config = ganttConfig();
+  const labelWidth = 220;
+  const available = containerWidth - labelWidth;
+  if (available <= 0) return config.dayWidth;
+  return Math.max(config.dayWidth, available / timeline.days);
+}
 function drawGantt() {
   const target = $("#ganttPanel");
   if (!target) return;
@@ -726,20 +739,23 @@ function drawGantt() {
   const timeline = state.ganttTimeline;
   const start = timeline.startDate;
   const config = ganttConfig();
+  const dayWidth = responsiveDayWidth();
+  state.ganttDayWidth = dayWidth;
   const timelineStart = taskHalfHours(start);
-  const pixelsPerHalfHour = config.dayWidth / 48;
+  const pixelsPerHalfHour = dayWidth / 48;
   const total = timeline.days;
-  const timelineWidth = total * config.dayWidth;
-  const ticks = ganttHeader(start, total, config);
+  const timelineWidth = total * dayWidth;
+  const ticks = ganttHeader(start, total, config, dayWidth);
 
   const rows =
     state.ganttView === "assignees"
-      ? assigneeRows(timelineStart, pixelsPerHalfHour, timelineWidth, config)
-      : taskGanttRows(timelineStart, pixelsPerHalfHour, timelineWidth, config);
+      ? assigneeRows(timelineStart, pixelsPerHalfHour, timelineWidth, config, dayWidth)
+      : taskGanttRows(timelineStart, pixelsPerHalfHour, timelineWidth, config, dayWidth);
   const heading =
     state.ganttView === "assignees" ? "负责人 / 任务" : "任务 / 负责人";
   target.dataset.granularity = state.filters.granularity || "day";
-  target.innerHTML = `<div class="gantt-screen-tools">${tool("gantt-fullscreen", "退出全屏", "minimize-2")}</div><div class="gantt-inner" style="width:${timelineWidth + 220}px"><div class="timeline-head" style="grid-template-columns:220px ${timelineWidth}px"><div class="timeline-spacer">${heading}</div>${ticks}</div>${rows}</div>`;
+  target.style.setProperty("--gantt-day-width", `${dayWidth}px`);
+  target.innerHTML = `<div class="gantt-screen-tools">${tool("gantt-fullscreen", "退出全屏", "minimize-2")}</div><div class="gantt-inner"><div class="timeline-head" style="grid-template-columns:220px ${timelineWidth}px"><div class="timeline-spacer">${heading}</div>${ticks}</div>${rows}</div>`;
   updateGanttFullscreenControls();
   if (!timeline.initialized) {
     timeline.scrollLeft = Math.max(
@@ -765,11 +781,11 @@ function extendGanttTimeline(viewport, direction) {
   const target = $("#ganttPanel");
   target.scrollLeft =
     direction === "left"
-      ? previousScrollLeft + config.extensionDays * config.dayWidth
+      ? previousScrollLeft + config.extensionDays * (state.ganttDayWidth || config.dayWidth)
       : previousScrollLeft;
   timeline.scrollLeft = target.scrollLeft;
   if (direction === "left" && ganttPan?.viewport === viewport)
-    ganttPan.startScrollLeft += config.extensionDays * config.dayWidth;
+    ganttPan.startScrollLeft += config.extensionDays * (state.ganttDayWidth || config.dayWidth);
   timeline.extending = false;
 }
 function pager(meta, prefix) {
@@ -1456,7 +1472,7 @@ root.addEventListener("click", (event) => {
           0,
           (taskHalfHours(nowTaskDateTime()) -
             taskHalfHours(timeline.startDate)) *
-            (config.dayWidth / 48) -
+            ((state.ganttDayWidth || config.dayWidth) / 48) -
             viewport.clientWidth / 2,
         );
       }
@@ -1626,7 +1642,7 @@ root.addEventListener(
     const timeline = state.ganttTimeline;
     if (!viewport || !timeline || timeline.extending) return;
     timeline.scrollLeft = viewport.scrollLeft;
-    const edgeWidth = ganttConfig().edgeDays * ganttConfig().dayWidth;
+    const edgeWidth = ganttConfig().edgeDays * (state.ganttDayWidth || ganttConfig().dayWidth);
     if (viewport.scrollLeft <= edgeWidth) extendGanttTimeline(viewport, "left");
     else if (
       viewport.scrollLeft + viewport.clientWidth >=
@@ -1665,7 +1681,7 @@ root.addEventListener("pointermove", (event) => {
   if (!drag) return;
   const timeline = state.ganttTimeline;
   const config = ganttConfig();
-  const pixelsPerHalfHour = config.dayWidth / 48;
+  const pixelsPerHalfHour = (state.ganttDayWidth || config.dayWidth) / 48;
   const totalHalfHours = timeline.days * 48;
   const timelineStart = taskHalfHours(timeline.startDate);
   const timelineEnd = timelineStart + totalHalfHours;
@@ -1771,6 +1787,14 @@ root.addEventListener("pointerup", () => {
       throw error;
     }
   });
+});
+
+let resizeTimer;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (state.gantt && state.tasks.length) drawGantt();
+  }, 100);
 });
 
 function restoreSession() {
