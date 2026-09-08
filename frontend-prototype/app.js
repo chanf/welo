@@ -1507,7 +1507,8 @@ root.addEventListener("click", (event) => {
             button.dataset.granularity === state.filters.granularity,
           ),
         );
-      await navigate("workspace");
+      resetGanttTimeline();
+      drawGantt();
     }
     if (/^(project|task|admin)-(prev|next)$/.test(action)) {
       const [key, direction] = action.split("-");
