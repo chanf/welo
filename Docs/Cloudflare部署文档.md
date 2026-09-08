@@ -169,7 +169,7 @@ users
 | Deploy command | `npm run deploy:production` |
 | Production branch | 使用实际生产分支，例如 `main` |
 
-项目的 `package.json` 已包含 Wrangler 和 TypeScript 依赖，`npm run build` 会执行 TypeScript 类型检查。`npm run deploy:production` 会根据 `wrangler.jsonc` 的 `production` 环境部署 Worker，并携带生产变量与 D1 绑定。
+项目的 `package.json` 已包含 Wrangler 和 TypeScript 依赖，`npm run build` 会执行 TypeScript 类型检查。`npm run deploy:production` 会使用 `wrangler.jsonc` 的默认生产配置部署 Worker，并携带生产变量与 D1 绑定。
 
 ### 3. 绑定 D1
 

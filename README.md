@@ -95,7 +95,7 @@ Vite 会把 `/api/*` 和 `/health` 代理到本地 Worker。默认代理地址�
 
 ### Worker 变量
 
-`wrangler.jsonc` 当前提供本地开发值：
+`wrangler.jsonc` 默认提供生产值，`npm run dev` 会使用其中的 `development` 环境：
 
 | 变量 | 本地值 | 说明 |
 | --- | --- | --- |

@@ -17,12 +17,12 @@
     }
   ],
   "vars": {
-    "ENVIRONMENT": "development",
+    "ENVIRONMENT": "production",
     "SESSION_TTL_DAYS": "14",
-    "CORS_ORIGINS": "http://localhost:5173,http://localhost:8787"
+    "CORS_ORIGINS": "https://welo.909939.xyz"
   },
   "env": {
-    "production": {
+    "development": {
       "name": "welo-api",
       "d1_databases": [
         {
@@ -33,9 +33,9 @@
         }
       ],
       "vars": {
-        "ENVIRONMENT": "production",
+        "ENVIRONMENT": "development",
         "SESSION_TTL_DAYS": "14",
-        "CORS_ORIGINS": "https://welo.909939.xyz"
+        "CORS_ORIGINS": "http://localhost:5173,http://localhost:8787"
       },
       "triggers": {
         "crons": ["*/30 * * * *"]

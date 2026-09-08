@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
+    "dev": "wrangler dev --env development",
     "build": "tsc --noEmit",
     "frontend:dev": "npm --prefix frontend-prototype run dev",
     "frontend:build": "npm --prefix frontend-prototype run build",
@@ -12,7 +12,7 @@
     "types": "wrangler types",
     "db:migrate:local": "wrangler d1 migrations apply welo --local",
     "db:migrate:remote": "wrangler d1 migrations apply welo --remote",
-    "deploy:production": "wrangler deploy --env production",
+    "deploy:production": "wrangler deploy",
     "test": "npm run build && npm run frontend:test"
   },
   "dependencies": {
