@@ -649,7 +649,7 @@ async function taskEditor(id) {
   openDialog(
     task ? "编辑任务" : "新建任务",
     field("标题", "title", task?.title, "text", 'required maxlength="200"') +
-      `<label class="field"><span>详细内容</span><textarea name="detail" maxlength="10000">${esc(task?.detail)}</textarea></label><div class="field-grid">${selectField("所属小组", "groupId", options(groups, task?.group.id, "选择小组"))}${selectField("负责人", "assigneeId", '<option value="">先选择小组</option>')}</div><div class="field-grid">${field("开始日期", "startDate", task?.startDate || "", "date")}${field("截止日期", "endDate", task?.endDate || today(), "date", "required")}</div><div class="field-grid">${selectField("状态", "status", enumOptions(statuses, task?.status || "todo"))}${selectField("优先级", "priority", enumOptions(priorities, task?.priority || "medium"))}</div>`,
+      `<label class="field"><span>详细内容</span><textarea name="detail" maxlength="10000">${esc(task?.detail)}</textarea></label><div class="field-grid">${selectField("所属小组", "groupId", options(groups, task?.group.id, "选择小组"))}${selectField("负责人", "assigneeId", '<option value="">先选择小组</option>')}</div><div class="field-grid">${field("开始日期", "startDate", task?.startDate || (task ? "" : today()), "date")}${field("截止日期", "endDate", task?.endDate || (task ? "" : dateAfter(2)), "date", "required")}</div><div class="field-grid">${selectField("状态", "status", enumOptions(statuses, task?.status || "todo"))}${selectField("优先级", "priority", enumOptions(priorities, task?.priority || "medium"))}</div>`,
     taskWritable()
       ? async (data) => {
           if (data.startDate && data.startDate > data.endDate)
@@ -689,10 +689,11 @@ async function taskEditor(id) {
     $("#dialogForm")
       .querySelectorAll("input,textarea,select")
       .forEach((x) => (x.disabled = true));
+  $("#dialogForm").dataset.autoAssignee = task ? "false" : "true";
   if (task) await loadAssignees(task.group.id, task.assignee.id);
 }
 let assigneeRequest = 0;
-async function loadAssignees(groupId, value = "") {
+async function loadAssignees(groupId, value = "", autoSelect = false) {
   const gen = ++assigneeRequest;
   const node = $('#dialog [name="assigneeId"]');
   if (!node) return;
@@ -703,7 +704,18 @@ async function loadAssignees(groupId, value = "") {
       ? (await api.groupMembers(state.team.id, groupId)).data
       : [];
     if (gen !== assigneeRequest || !node.isConnected) return;
-    node.innerHTML = options(users, value, "选择负责人");
+    const leastLoaded = [...users]
+      .sort(
+        (a, b) =>
+          (a.openTaskCount ?? 0) - (b.openTaskCount ?? 0) ||
+          a.username.localeCompare(b.username, "zh-Hans-CN"),
+      )
+      .at(0);
+    node.innerHTML = options(
+      users,
+      autoSelect && leastLoaded ? leastLoaded.id : value,
+      "选择负责人",
+    );
   } catch (error) {
     if (node.isConnected)
       node.innerHTML = '<option value="">成员不可用</option>';
@@ -1080,7 +1092,11 @@ root.addEventListener("change", (event) =>
       await navigate("workspace");
     }
     if (node.name === "groupId" && node.closest("#dialog"))
-      await loadAssignees(node.value);
+      await loadAssignees(
+        node.value,
+        "",
+        node.closest("#dialogForm")?.dataset.autoAssignee === "true",
+      );
   }),
 );
 root.addEventListener("click", (event) => {

@@ -260,8 +260,19 @@ app.get("/api/v1/teams/:teamId/groups/:groupId/members", async (c) => {
     const membership = await c.env.DB.prepare("SELECT id FROM group_members WHERE group_id = ? AND user_id = ?").bind(groupId, auth.user.id).first();
     if (!membership) throw notFound();
   }
-  const members = await c.env.DB.prepare("SELECT u.id, u.username FROM users u JOIN group_members gm ON gm.user_id = u.id WHERE gm.group_id = ? ORDER BY u.username").bind(groupId).all<{ id: number; username: string }>();
-  return ok(c, members.results.map(user => ({ id: String(user.id), username: user.username })));
+  const members = await c.env.DB.prepare(`
+    SELECT u.id, u.username, COUNT(t.id) AS open_task_count
+    FROM users u
+    JOIN group_members gm ON gm.user_id = u.id
+    LEFT JOIN tasks t ON t.assignee_id = u.id
+      AND t.deleted_at IS NULL
+      AND t.status <> 'done'
+      AND t.group_id IN (SELECT id FROM team_groups WHERE team_id = ?)
+    WHERE gm.group_id = ?
+    GROUP BY u.id, u.username
+    ORDER BY u.username
+  `).bind(teamId, groupId).all<{ id: number; username: string; open_task_count: number }>();
+  return ok(c, members.results.map(user => ({ id: String(user.id), username: user.username, openTaskCount: Number(user.open_task_count) })));
 });
 
 app.delete("/api/v1/teams/:teamId/groups/:groupId/members/:userId", async (c) => {
