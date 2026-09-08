@@ -433,7 +433,7 @@ paths:
         - $ref: '#/components/parameters/TaskFiltersPriority'
         - name: granularity
           in: query
-          schema: { type: string, enum: [day, week, month], default: week }
+          schema: { type: string, enum: [hour, halfDay, day], default: day }
       responses:
         '200':
           description: 甘特图范围和任务
@@ -1046,7 +1046,7 @@ components:
               properties:
                 startDate: { $ref: '#/components/schemas/TaskDateTime' }
                 endDate: { $ref: '#/components/schemas/TaskDateTime' }
-                granularity: { type: string, enum: [day, week, month] }
+                granularity: { type: string, enum: [hour, halfDay, day] }
             tasks:
               type: array
               items: { $ref: '#/components/schemas/Task' }

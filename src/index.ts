@@ -509,7 +509,9 @@ app.get("/api/v1/teams/:teamId/projects/:projectId/gantt", async (c) => {
   const dates = tasks.flatMap((task) => [task.renderStartDate, task.endDate]).sort();
   const shift = (value: string, days: number) => { const d = new Date(Date.parse(`${value.slice(0, 10)}T00:00:00Z`)); d.setUTCDate(d.getUTCDate() + days); return `${d.toISOString().slice(0, 10)}T00:00`; };
   const today = `${new Date().toISOString().slice(0, 10)}T00:00`;
-  return ok(c, { project: projectDto(project), range: { startDate: dates.length ? shift(dates[0], -3) : today, endDate: dates.length ? shift(dates.at(-1)!, 3) : today, granularity: c.req.query("granularity") || "week" }, tasks });
+  const requestedGranularity = c.req.query("granularity");
+  const granularity = requestedGranularity === "hour" || requestedGranularity === "halfDay" || requestedGranularity === "day" ? requestedGranularity : "day";
+  return ok(c, { project: projectDto(project), range: { startDate: dates.length ? shift(dates[0], -3) : today, endDate: dates.length ? shift(dates.at(-1)!, 3) : today, granularity }, tasks });
 });
 
 app.get("/api/v1/teams/:teamId/dashboard", async (c) => {

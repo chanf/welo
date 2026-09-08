@@ -1048,58 +1048,112 @@
         grid-template-columns: 220px auto;
         background: #fbfcfa;
         border-bottom: 1px solid var(--line);
+        height: 58px;
+        overflow: hidden;
+        position: relative;
+        z-index: 3;
       }
       .timeline-spacer {
-        padding: 13px 18px;
+        display: flex;
+        align-items: center;
+        padding: 0 18px;
         color: var(--muted);
         font-size: 10px;
         letter-spacing: 0.5px;
+        border-right: 1px solid #edf0ed;
+        white-space: nowrap;
       }
-      .days {
+      .timeline-cells {
         display: flex;
         width: max-content;
         position: relative;
       }
-      .day {
+      .gantt-cell,
+      .day-group {
         flex: 0 0 auto;
-        padding: 11px 5px 9px;
-        text-align: center;
-        border-left: 1px solid #edf0ed;
-        color: var(--muted);
-        font:
-          10px "DM Mono",
-          monospace;
       }
-      .day strong {
-        display: block;
-        margin-top: 5px;
-        font:
-          12px "DM Mono",
-          monospace;
-        color: var(--ink);
-      }
-      .day.today strong {
-        color: var(--coral);
-      }
-      .day.day-daily {
+      .gantt-cell {
         display: grid;
         place-items: center;
-        align-content: center;
-        min-height: 54px;
-        padding: 6px 3px;
+        border-left: 1px solid #edf0ed;
+        color: var(--muted);
+        font-size: 10px;
+        line-height: 1;
+        white-space: nowrap;
+        user-select: none;
       }
-      .day-daily .day-date {
-        margin-top: 0;
-        line-height: 1.05;
+      .timeline-cells .current {
+        background: var(--mint);
+        color: #0b5f50;
       }
-      .day-daily .day-weekday {
-        margin-top: 4px;
+      .day-group {
+        display: grid;
+        grid-template-rows: 30px 28px;
+        border-left: 1px solid #edf0ed;
+      }
+      .day-group-label {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        min-width: 0;
+        padding: 0 3px;
+        border-bottom: 1px solid #edf0ed;
+        white-space: nowrap;
+      }
+      .day-group-label strong {
+        color: var(--ink);
+        font:
+          11px "DM Mono",
+          monospace;
+        line-height: 1;
+      }
+      .day-group-label span,
+      .day-cell span {
         color: var(--label);
         font:
           10px "Noto Sans SC",
           sans-serif;
         line-height: 1;
-        white-space: nowrap;
+      }
+      .day-group.today {
+        background: rgba(22, 124, 104, 0.07);
+      }
+      .day-group.today .day-group-label strong {
+        color: var(--coral);
+      }
+      .day-cells {
+        display: flex;
+        height: 28px;
+      }
+      .granularity-hour .gantt-cell {
+        font:
+          10px "DM Mono",
+          monospace;
+      }
+      .granularity-halfDay .gantt-cell {
+        font-family: "Noto Sans SC", sans-serif;
+      }
+      .day-cell {
+        display: grid;
+        place-content: center;
+        align-content: center;
+        gap: 4px;
+        height: 58px;
+        padding: 0 2px;
+      }
+      .day-cell strong {
+        color: var(--ink);
+        font:
+          11px "DM Mono",
+          monospace;
+        line-height: 1;
+      }
+      .day-cell.current {
+        color: #0b5f50;
+      }
+      .day-cell.current strong {
+        color: #0b5f50;
       }
       .timeline-row {
         display: grid;
@@ -1144,10 +1198,28 @@
         overflow: hidden;
         background-image: linear-gradient(
           to right,
-          #edf0ed 1px,
+          var(--grid-line) 1px,
           transparent 1px
         );
-        background-size: 42px 100%;
+        background-size: var(--gantt-day-width) 100%;
+      }
+      .track.granularity-hour {
+        background-image:
+          linear-gradient(
+            to right,
+            color-mix(in srgb, var(--grid-line) 88%, var(--ink)) 1px,
+            transparent 1px
+          ),
+          linear-gradient(to right, var(--grid-line) 1px, transparent 1px);
+        background-size:
+          var(--gantt-day-width) 100%,
+          32px 100%;
+      }
+      .track.granularity-halfDay {
+        background-size: 64px 100%;
+      }
+      .track.granularity-day {
+        background-size: var(--gantt-day-width) 100%;
       }
       .today-line {
         position: absolute;
@@ -1161,7 +1233,7 @@
       .bar {
         align-self: center;
         height: 28px;
-        margin: 0 3px;
+        margin: 0;
         border-radius: 6px;
         position: relative;
         z-index: 2;
@@ -1172,6 +1244,7 @@
         color: white;
         cursor: grab;
         white-space: nowrap;
+        min-width: 8px;
         box-shadow: 0 3px 7px rgba(40, 60, 50, 0.1);
         user-select: none;
       }

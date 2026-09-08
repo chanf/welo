@@ -281,7 +281,37 @@ svg {
   display: block;
   position: relative;
   overflow: hidden;
-  background-size: 42px 100%;
+  background-size: var(--gantt-day-width) 100%;
+}
+
+.track.granularity-hour {
+  background-image:
+    linear-gradient(
+      to right,
+      color-mix(in srgb, var(--grid-line) 88%, var(--ink)) 1px,
+      transparent 1px
+    ),
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px);
+  background-size:
+    var(--gantt-day-width) 100%,
+    32px 100%;
+}
+
+.track.granularity-halfDay {
+  background-size: 64px 100%;
+}
+
+.track.granularity-day {
+  background-size: var(--gantt-day-width) 100%;
+}
+
+[data-theme="solaris"] .timeline-cells .current,
+[data-theme="solaris"] .day-cell.current {
+  color: #b8f0e5;
+}
+
+[data-theme="solaris"] .day-cell.current strong {
+  color: #b8f0e5;
 }
 .gantt {
   position: relative;
@@ -361,7 +391,7 @@ svg {
   position: absolute;
   top: 19px;
   margin: 0;
-  min-width: 5px;
+  min-width: 8px;
   touch-action: none;
 }
 .bar-label {
