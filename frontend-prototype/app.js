@@ -719,12 +719,24 @@ async function memberAdder(groupId) {
         toast("成员已添加");
       },
     );
-  } else
+  } else {
+    const existingUsers = new Set(
+      (await api.members(state.team.id)).data.map((x) => String(x.user.id)),
+    );
     openDialog(
       "添加团队成员",
-      field("查找用户名或邮箱", "keyword", "", "text", "required") +
-        '<div id="userResults"></div>' +
-        button("find-user", "搜索人员", "search"),
+      `<div class="member-picker" id="memberPicker">
+        <div class="field"><label for="memberSearch">人员</label>
+          <div class="member-input">
+            <span class="member-affix" aria-hidden="true">${icon("search")}</span>
+            <input id="memberSearch" name="keyword" type="text" autocomplete="off" placeholder="输入用户名或邮箱搜索" role="combobox" aria-expanded="false" aria-controls="memberResults" aria-autocomplete="list">
+            <button type="button" class="member-clear" data-action="member-clear" aria-label="清除已选人员" title="清除已选人员" hidden>${icon("x")}</button>
+            <div class="member-results" id="memberResults" role="listbox" aria-label="人员搜索结果"></div>
+          </div>
+        </div>
+        <input type="hidden" name="userId">
+        <p class="member-state" id="memberState" role="status">正在加载人员...</p>
+      </div>`,
       async (data) => {
         if (!data.userId) throw new Error("请先搜索并选择人员");
         await api.addMember(state.team.id, data.userId);
@@ -733,6 +745,143 @@ async function memberAdder(groupId) {
         toast("成员已添加");
       },
     );
+    setupMemberPicker(existingUsers);
+  }
+}
+
+function setupMemberPicker(existingUsers = new Set()) {
+  const picker = $("#memberPicker");
+  const input = $("#memberSearch");
+  const hidden = picker.querySelector('[name="userId"]');
+  const results = $("#memberResults");
+  const status = $("#memberState");
+  const clear = picker.querySelector('[data-action="member-clear"]');
+  const save = $('#dialogForm [type="submit"]');
+  let requestToken = 0;
+  let searchTimer;
+  const events = new AbortController();
+  save.disabled = true;
+
+  const closeResults = () => {
+    results.innerHTML = "";
+    results.hidden = true;
+    input.setAttribute("aria-expanded", "false");
+  };
+  const setSelected = (user) => {
+    hidden.value = user.id;
+    input.value = `${user.username} · ${user.email}`;
+    save.disabled = false;
+    clear.hidden = false;
+    status.textContent = `已选择：${user.username}`;
+    closeResults();
+  };
+  const clearSelection = ({ focusInput = true } = {}) => {
+    hidden.value = "";
+    input.value = "";
+    clear.hidden = true;
+    save.disabled = true;
+    status.textContent = "输入用户名或邮箱搜索";
+    if (focusInput) input.focus();
+  };
+  const renderResults = (users, token) => {
+    if (token !== requestToken || !picker.isConnected) return;
+    if (!users.length) {
+      closeResults();
+      status.textContent = "没有匹配的人员";
+      return;
+    }
+    status.textContent = `共 ${users.length} 位匹配人员`;
+    results.innerHTML = users
+      .map((user) => {
+        const selected = String(user.id) === hidden.value;
+        const existing = existingUsers.has(String(user.id));
+        return `<button type="button" role="option" class="member-option" id="member-option-${esc(user.id)}" aria-selected="${selected}" data-action="member-option" data-id="${esc(user.id)}" data-name="${esc(user.username)}" data-email="${esc(user.email)}" ${existing ? "disabled" : ""}>
+          <span><strong>${esc(user.username)}</strong><small>${esc(user.email)}</small></span>
+          <em>${existing ? "已在团队" : user.systemRole === "super_admin" ? "超级管理员" : "普通成员"}</em>
+        </button>`;
+      })
+      .join("");
+    results.hidden = false;
+    input.setAttribute("aria-expanded", "true");
+  };
+  const searchUsers = async (keyword) => {
+    const token = ++requestToken;
+    status.textContent = "正在搜索...";
+    try {
+      const result = await api.adminUsers({ keyword, pageSize: 20 });
+      renderResults(result.data, token);
+    } catch (error) {
+      if (token !== requestToken || !picker.isConnected) return;
+      closeResults();
+      status.textContent = `人员搜索失败：${errorMessage(error)}`;
+    }
+  };
+
+  picker.addEventListener(
+    "input",
+    () => {
+      hidden.value = "";
+      clear.hidden = true;
+      save.disabled = true;
+      clearTimeout(searchTimer);
+      const keyword = input.value.trim();
+      searchTimer = setTimeout(() => searchUsers(keyword), 250);
+    },
+    { signal: events.signal },
+  );
+  input.addEventListener("focus", () => {
+    if (results.children.length) input.setAttribute("aria-expanded", "true");
+  });
+  input.addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowDown" || !results.children.length) return;
+    event.preventDefault();
+    results.querySelector("button:not([disabled])")?.focus();
+  });
+  picker.addEventListener(
+    "click",
+    (event) => {
+      const option = event.target.closest('[data-action="member-option"]');
+      if (!option || option.disabled) return;
+      setSelected({
+        id: option.dataset.id,
+        username: option.dataset.name,
+        email: option.dataset.email,
+      });
+    },
+    { signal: events.signal },
+  );
+  picker.addEventListener(
+    "click",
+    (event) => {
+      if (!event.target.closest('[data-action="member-clear"]')) return;
+      event.stopPropagation();
+      clearSelection();
+    },
+    { signal: events.signal },
+  );
+  picker.addEventListener(
+    "keydown",
+    (event) => {
+      if (event.key === "Escape") closeResults();
+    },
+    { signal: events.signal },
+  );
+  root.addEventListener(
+    "click",
+    (event) => {
+      if (!event.target.closest("#memberPicker")) closeResults();
+    },
+    { capture: true, signal: events.signal },
+  );
+  $("#dialog").addEventListener(
+    "close",
+    () => {
+      clearTimeout(searchTimer);
+      events.abort();
+    },
+    { once: true },
+  );
+  searchUsers("");
 }
 
 root.addEventListener("submit", (event) => {
@@ -917,17 +1066,6 @@ root.addEventListener("click", (event) => {
           toast("角色已更新");
         },
       );
-    if (action === "find-user") {
-      const result = await api.adminUsers({
-        keyword: $('#dialog [name="keyword"]').value,
-        pageSize: 100,
-      });
-      $("#userResults").innerHTML = selectField(
-        "人员",
-        "userId",
-        options(result.data, "", "选择人员"),
-      );
-    }
     if (action === "mobile-team")
       openDialog(
         "切换团队",
