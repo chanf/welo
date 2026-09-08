@@ -12,7 +12,12 @@ import { allocateUserColor } from "./shared/user-color";
 type App = { Bindings: Env; Variables: { requestId: string; auth: ReturnType<typeof currentAuth> } };
 type AppContext = Context<App>;
 const app = new Hono<App>();
-const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "日期格式必须为 YYYY-MM-DD");
+const taskDateTime = z.string()
+  .regex(/^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):(?:00|30)$/, "任务时间格式必须为 YYYY-MM-DDTHH:mm，且按 30 分钟对齐")
+  .refine((value) => {
+    const parsed = Date.parse(`${value}:00Z`);
+    return !Number.isNaN(parsed) && new Date(parsed).toISOString().slice(0, 10) === value.slice(0, 10);
+  }, "任务时间不存在");
 const userSchema = z.object({ username: z.string().min(2).max(32), email: z.string().email().max(255), password: z.string().min(8), passwordConfirmation: z.string().min(8) });
 const loginSchema = z.object({ account: z.string().min(1).max(255), password: z.string().min(1) });
 const id = (value: string | undefined) => {
@@ -356,7 +361,7 @@ app.delete("/api/v1/teams/:teamId/projects/:projectId", async (c) => {
 
 const taskRow = z.object({
   title: z.string().min(1).max(200), detail: z.string().max(10000).nullable().optional(), groupId: z.string().regex(/^\d+$/),
-  assigneeId: z.string().regex(/^\d+$/), startDate: date.nullable().optional(), endDate: date, status: z.enum(["todo", "in_progress", "done"]).optional(), priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
+  assigneeId: z.string().regex(/^\d+$/), startDate: taskDateTime.nullable().optional(), endDate: taskDateTime, status: z.enum(["todo", "in_progress", "done"]).optional(), priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
 });
 const taskDto = (row: { id: number; project_id: number; group_id: number; group_team_id: number; group_name: string; group_description: string | null; group_status: "active" | "disabled"; group_member_count: number; title: string; detail: string | null; assignee_id: number; assignee_name: string; assignee_color: string; start_date: string | null; end_date: string; status: "todo" | "in_progress" | "done"; priority: "low" | "medium" | "high" | "urgent"; completed_at: string | null; created_by: number; creator_name: string; created_at: string; updated_at: string }) => ({
   id: String(row.id), projectId: String(row.project_id), group: { id: String(row.group_id), name: row.group_name, status: row.group_status, teamId: String(row.group_team_id), description: row.group_description, memberCount: Number(row.group_member_count) },
@@ -415,7 +420,7 @@ app.post("/api/v1/teams/:teamId/projects/:projectId/tasks", async (c) => {
   }
   const assignee = await c.env.DB.prepare("SELECT id FROM group_members WHERE group_id = ? AND user_id = ?").bind(groupId, assigneeId).first();
   if (!assignee) throw new ApiError(409, "CONFLICT", "负责人必须属于任务小组");
-  if (body.startDate && body.startDate > body.endDate) throw new ApiError(400, "VALIDATION_ERROR", "开始日期不能晚于结束日期");
+  if (body.startDate && body.startDate > body.endDate) throw new ApiError(400, "VALIDATION_ERROR", "开始时间不能晚于结束时间");
   const status = body.status ?? "todo";
   const completedAt = status === "done" ? new Date().toISOString() : null;
   const result = await c.env.DB.prepare(`
@@ -437,7 +442,7 @@ app.patch("/api/v1/teams/:teamId/projects/:projectId/tasks/:taskId", async (c) =
   const taskId = id(c.req.param("taskId"));
   const loaded = await visibleTask(c, teamId, projectId, taskId);
   const body = await jsonBody(c, z.object({ ...taskRow.shape, expectedUpdatedAt: z.string().datetime().optional() }).partial().refine((value) => Object.keys(value).length > 0));
-  if (body.startDate && body.endDate && body.startDate > body.endDate) throw new ApiError(400, "VALIDATION_ERROR", "开始日期不能晚于结束日期");
+  if (body.startDate && body.endDate && body.startDate > body.endDate) throw new ApiError(400, "VALIDATION_ERROR", "开始时间不能晚于结束时间");
   let groupId = body.groupId ? id(body.groupId) : loaded.task.group_id;
   const assigneeId = body.assigneeId ? id(body.assigneeId) : loaded.task.assignee_id;
   if (body.groupId || body.assigneeId) {
@@ -450,7 +455,7 @@ app.patch("/api/v1/teams/:teamId/projects/:projectId/tasks/:taskId", async (c) =
   const completedAt = status === "done" ? (loaded.task.completed_at ?? new Date().toISOString()) : null;
   await projectAccess(c, teamId, projectId, true);
   const startDate = body.startDate === undefined ? loaded.task.start_date : body.startDate;
-  if (startDate && startDate > (body.endDate ?? loaded.task.end_date)) throw new ApiError(400, "VALIDATION_ERROR", "开始日期不能晚于结束日期");
+  if (startDate && startDate > (body.endDate ?? loaded.task.end_date)) throw new ApiError(400, "VALIDATION_ERROR", "开始时间不能晚于结束时间");
   if (body.expectedUpdatedAt && body.expectedUpdatedAt !== isoTimestamp(loaded.task.updated_at)) throw new ApiError(409, "VERSION_CONFLICT", "任务已被其他请求更新，请重新加载");
   const expected = loaded.task.updated_at;
   const result = await c.env.DB.prepare(`
@@ -480,10 +485,10 @@ app.patch("/api/v1/teams/:teamId/projects/:projectId/tasks/:taskId/schedule", as
   const projectId = id(c.req.param("projectId"));
   const taskId = id(c.req.param("taskId"));
   const loaded = await visibleTask(c, teamId, projectId, taskId);
-  const body = await jsonBody(c, z.object({ startDate: date.nullable().optional(), endDate: date, expectedUpdatedAt: z.string().datetime() }));
+  const body = await jsonBody(c, z.object({ startDate: taskDateTime.nullable().optional(), endDate: taskDateTime, expectedUpdatedAt: z.string().datetime() }));
   await projectAccess(c, teamId, projectId, true);
   if (body.expectedUpdatedAt !== isoTimestamp(loaded.task.updated_at)) throw new ApiError(409, "VERSION_CONFLICT", "任务排期已被其他请求更新，请重新加载");
-  if (body.startDate && body.startDate > body.endDate) throw new ApiError(400, "VALIDATION_ERROR", "开始日期不能晚于结束日期");
+  if (body.startDate && body.startDate > body.endDate) throw new ApiError(400, "VALIDATION_ERROR", "开始时间不能晚于结束时间");
   const result = await c.env.DB.prepare("UPDATE tasks SET start_date = ?, end_date = ?, updated_at = ? WHERE id = ? AND project_id = ? AND deleted_at IS NULL AND updated_at = ?")
     .bind(body.startDate ?? null, body.endDate, nextTaskVersion(loaded.task.updated_at), taskId, projectId, loaded.task.updated_at).run();
   if (!result.meta.changes) throw new ApiError(409, "VERSION_CONFLICT", "任务排期已被其他请求更新，请重新加载");
@@ -502,8 +507,9 @@ app.get("/api/v1/teams/:teamId/projects/:projectId/gantt", async (c) => {
   const rows = await c.env.DB.prepare(`${taskSelect} WHERE ${clauses.join(" AND ")} ORDER BY t.end_date, t.id`).bind(...params).all<Parameters<typeof taskDto>[0]>();
   const tasks = rows.results.map(taskDto);
   const dates = tasks.flatMap((task) => [task.renderStartDate, task.endDate]).sort();
-  const shift = (value: string, days: number) => { const d = new Date(`${value}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); };
-  return ok(c, { project: projectDto(project), range: { startDate: dates.length ? shift(dates[0], -3) : new Date().toISOString().slice(0, 10), endDate: dates.length ? shift(dates.at(-1)!, 3) : new Date().toISOString().slice(0, 10), granularity: c.req.query("granularity") || "week" }, tasks });
+  const shift = (value: string, days: number) => { const d = new Date(Date.parse(`${value.slice(0, 10)}T00:00:00Z`)); d.setUTCDate(d.getUTCDate() + days); return `${d.toISOString().slice(0, 10)}T00:00`; };
+  const today = `${new Date().toISOString().slice(0, 10)}T00:00`;
+  return ok(c, { project: projectDto(project), range: { startDate: dates.length ? shift(dates[0], -3) : today, endDate: dates.length ? shift(dates.at(-1)!, 3) : today, granularity: c.req.query("granularity") || "week" }, tasks });
 });
 
 app.get("/api/v1/teams/:teamId/dashboard", async (c) => {
@@ -517,13 +523,13 @@ app.get("/api/v1/teams/:teamId/dashboard", async (c) => {
       (SELECT COUNT(*) FROM projects p WHERE p.team_id = ? AND p.status = 'active' AND p.deleted_at IS NULL) AS in_progress_project_count,
       COUNT(t.id) AS visible_task_count,
       SUM(CASE WHEN t.assignee_id = ? AND t.status <> 'done' THEN 1 ELSE 0 END) AS my_open_task_count,
-      SUM(CASE WHEN t.status <> 'done' AND t.end_date < date('now') THEN 1 ELSE 0 END) AS overdue_task_count,
-      SUM(CASE WHEN t.status <> 'done' AND t.end_date >= date('now') AND t.end_date <= date('now', '+7 day') THEN 1 ELSE 0 END) AS upcoming_deadline_count
+      SUM(CASE WHEN t.status <> 'done' AND substr(t.end_date, 1, 10) < date('now') THEN 1 ELSE 0 END) AS overdue_task_count,
+      SUM(CASE WHEN t.status <> 'done' AND substr(t.end_date, 1, 10) >= date('now') AND substr(t.end_date, 1, 10) <= date('now', '+7 day') THEN 1 ELSE 0 END) AS upcoming_deadline_count
     FROM tasks t JOIN projects p ON p.id = t.project_id AND p.team_id = ? AND p.deleted_at IS NULL
     WHERE t.deleted_at IS NULL ${visible}
   `).bind(teamId, auth.user.id, teamId, ...(auth.user.systemRole === "super_admin" ? [] : [auth.user.id])).first<{ in_progress_project_count: number; visible_task_count: number; my_open_task_count: number; overdue_task_count: number; upcoming_deadline_count: number }>();
   const recent = await c.env.DB.prepare("SELECT * FROM projects WHERE team_id = ? AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT 5").bind(teamId).all<Parameters<typeof projectDto>[0]>();
-  const deadlines = await c.env.DB.prepare(`${taskSelect} WHERE t.deleted_at IS NULL AND t.end_date >= date('now') AND t.project_id IN (SELECT id FROM projects WHERE team_id = ? AND deleted_at IS NULL) ${visible} ORDER BY t.end_date LIMIT 5`).bind(teamId, ...(auth.user.systemRole === "super_admin" ? [] : [auth.user.id])).all<Parameters<typeof taskDto>[0]>();
+  const deadlines = await c.env.DB.prepare(`${taskSelect} WHERE t.deleted_at IS NULL AND substr(t.end_date, 1, 10) >= date('now') AND substr(t.end_date, 1, 10) <= date('now', '+7 day') AND t.project_id IN (SELECT id FROM projects WHERE team_id = ? AND deleted_at IS NULL) ${visible} ORDER BY t.end_date LIMIT 5`).bind(teamId, ...(auth.user.systemRole === "super_admin" ? [] : [auth.user.id])).all<Parameters<typeof taskDto>[0]>();
   return ok(c, { inProgressProjectCount: Number(stats?.in_progress_project_count ?? 0), visibleTaskCount: Number(stats?.visible_task_count ?? 0), myOpenTaskCount: Number(stats?.my_open_task_count ?? 0), overdueTaskCount: Number(stats?.overdue_task_count ?? 0), upcomingDeadlineCount: Number(stats?.upcoming_deadline_count ?? 0), recentProjects: recent.results.map((row) => projectDto(row)), upcomingDeadlines: deadlines.results.map(taskDto) });
 });
 

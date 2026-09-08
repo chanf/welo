@@ -110,9 +110,37 @@ const dateAfter = (days) => {
   return date.toLocaleDateString("en-CA");
 };
 const today = () => dateAfter(0);
-const dayNumber = (value) => Date.parse(`${value}T00:00:00Z`) / 86400000;
-const addDays = (value, days) =>
-  new Date((dayNumber(value) + days) * 86400000).toISOString().slice(0, 10);
+const pad = (value) => String(value).padStart(2, "0");
+const dateTimeAfter = (days, hour, minute) => {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  date.setHours(hour, minute, 0, 0);
+  return `${date.toLocaleDateString("en-CA")}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
+const normalizeTaskDateTime = (value) => {
+  if (!value) return "";
+  const normalized =
+    value.length === 10 ? `${value}T00:00` : value.slice(0, 16);
+  if (!/^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):(?:00|30)$/.test(normalized))
+    return null;
+  const parsed = new Date(`${normalized}:00Z`);
+  return !Number.isNaN(parsed.getTime()) &&
+    parsed.toISOString().slice(0, 10) === normalized.slice(0, 10)
+    ? normalized
+    : null;
+};
+const formatTaskDateTime = (value) =>
+  value ? `${value.slice(0, 10)} ${value.slice(11, 16)}` : "未设置";
+const dayNumber = (value) =>
+  Date.parse(`${value.slice(0, 10)}T00:00:00Z`) / 86400000;
+const addDays = (value, days) => {
+  const hasTime = value.length > 10;
+  const parsed = hasTime
+    ? Date.parse(`${value}:00Z`)
+    : Date.parse(`${value}T00:00:00Z`);
+  const result = new Date(parsed + days * 86400000).toISOString();
+  return result.slice(0, hasTime ? 16 : 10);
+};
 const weekdayName = (value) =>
   ["日", "一", "二", "三", "四", "五", "六"][
     new Date(`${value}T00:00:00Z`).getUTCDay()
@@ -355,7 +383,7 @@ function taskRows(tasks, schedule = false) {
   return tasks
     .map(
       (t) =>
-        `<tr><td><button class="text-link" data-action="task-edit" data-id="${esc(t.id)}">${esc(t.title)}</button></td><td>${esc(t.group.name)}</td><td>${esc(t.assignee.username)}</td>${schedule ? `<td>${esc(t.startDate || "未设置")}</td>` : ""}<td>${esc(t.endDate)}</td><td><span class="status ${esc(t.status)}">${esc(statuses[t.status])}</span></td>${schedule ? "" : `<td>${esc(priorities[t.priority])}</td>`}</tr>`,
+        `<tr><td><button class="text-link" data-action="task-edit" data-id="${esc(t.id)}">${esc(t.title)}</button></td><td>${esc(t.group.name)}</td><td>${esc(t.assignee.username)}</td>${schedule ? `<td>${esc(formatTaskDateTime(t.startDate))}</td>` : ""}<td>${esc(formatTaskDateTime(t.endDate))}</td><td><span class="status ${esc(t.status)}">${esc(statuses[t.status])}</span></td>${schedule ? "" : `<td>${esc(priorities[t.priority])}</td>`}</tr>`,
     )
     .join("");
 }
@@ -388,7 +416,7 @@ async function workspace(gen) {
       )
       .join(
         "",
-      )}</section><div class="workspace-grid"><section class="panel"><div class="panel-head"><div><h2>${esc(state.project?.name || "项目排期")}</h2><p>${state.tasks.length} 个可见任务</p></div><div class="head-actions">${projectSelector()}<select id="granularity" class="select" aria-label="时间粒度">${enumOptions({ day: "日", week: "周", month: "月" }, state.filters.granularity || "day")}</select>${tool("toggle-view", "切换甘特图与列表", "list")}</div></div><div id="ganttPanel" class="gantt"></div><div id="scheduleTable" hidden>${table(["任务", "小组", "负责人", "开始", "截止", "状态"], taskRows(state.tasks, true))}</div></section><aside class="side-stack"><section class="panel"><div class="panel-head"><h2>即将到期</h2></div><div class="deadline-list">${d.upcomingDeadlines.map((t) => `<div class="deadline"><div class="date-box"><b>${esc(t.endDate.slice(8))}</b><small>${esc(t.endDate.slice(5, 7))}月</small></div><div class="deadline-name">${esc(t.title)}<small>${esc(t.assignee.username)}</small></div></div>`).join("") || empty("暂无即将到期任务")}</div></section><section class="panel"><div class="panel-head"><h2>团队小组</h2></div><div class="members">${state.groups.map((g) => `<div class="member-row"><div class="avatar green">${esc(g.name.slice(0, 1))}</div><div class="identity">${esc(g.name)}<small>${g.memberCount} 位成员 · ${g.status === "active" ? "正常" : "已停用"}</small></div></div>`).join("") || empty("暂无小组")}</div></section></aside></div>`;
+      )}</section><div class="workspace-grid"><section class="panel"><div class="panel-head"><div><h2>${esc(state.project?.name || "项目排期")}</h2><p>${state.tasks.length} 个可见任务</p></div><div class="head-actions">${projectSelector()}<select id="granularity" class="select" aria-label="时间粒度">${enumOptions({ day: "日", week: "周", month: "月" }, state.filters.granularity || "day")}</select>${tool("toggle-view", "切换甘特图与列表", "list")}</div></div><div id="ganttPanel" class="gantt"></div><div id="scheduleTable" hidden>${table(["任务", "小组", "负责人", "开始", "截止", "状态"], taskRows(state.tasks, true))}</div></section><aside class="side-stack"><section class="panel"><div class="panel-head"><h2>即将到期</h2></div><div class="deadline-list">${d.upcomingDeadlines.map((t) => `<div class="deadline"><div class="date-box"><b>${esc(t.endDate.slice(8, 10))}</b><small>${esc(t.endDate.slice(5, 7))}月</small></div><div class="deadline-name">${esc(t.title)}<small>${esc(t.assignee.username)}</small></div></div>`).join("") || empty("暂无即将到期任务")}</div></section><section class="panel"><div class="panel-head"><h2>团队小组</h2></div><div class="members">${state.groups.map((g) => `<div class="member-row"><div class="avatar green">${esc(g.name.slice(0, 1))}</div><div class="identity">${esc(g.name)}<small>${g.memberCount} 位成员 · ${g.status === "active" ? "正常" : "已停用"}</small></div></div>`).join("") || empty("暂无小组")}</div></section></aside></div>`;
   $("#granularity")?.insertAdjacentHTML(
     "afterend",
     `${ganttViewSwitch()}${tool("gantt-today", "回到今天", "calendar-days")}${ganttFullscreenButton()}`,
@@ -470,7 +498,7 @@ function ganttBar(
   width = Math.min(width, timelineWidth - left);
   if (width <= 0) return "";
   const barColor = ganttColor(color);
-  return `<div class="bar ${ganttBarClass(task)} colored${conflicted ? " conflict" : ""}" data-task-id="${esc(task.id)}" style="--bar-color:${barColor};left:${left}px;width:${width}px;top:${top}px" title="${esc(task.title)}: ${esc(task.startDate || "未设置开始日期")} ~ ${esc(task.endDate)}">${task.isVirtualStart ? "" : '<span class="handle left"></span>'}<span class="bar-label">${esc(task.title)}</span><span class="handle right"></span></div>`;
+  return `<div class="bar ${ganttBarClass(task)} colored${conflicted ? " conflict" : ""}" data-task-id="${esc(task.id)}" style="--bar-color:${barColor};left:${left}px;width:${width}px;top:${top}px" title="${esc(task.title)}: ${esc(task.startDate ? formatTaskDateTime(task.startDate) : "未设置开始时间")} ~ ${esc(formatTaskDateTime(task.endDate))}">${task.isVirtualStart ? "" : '<span class="handle left"></span>'}<span class="bar-label">${esc(task.title)}</span><span class="handle right"></span></div>`;
 }
 
 function assigneeGanttRows() {
@@ -676,7 +704,7 @@ async function tasksView(gen) {
   if (gen !== state.generation) return;
   state.tasks = result.data;
   $("#view").innerHTML =
-    `<div class="page-heading"><h1>任务</h1><div class="head-actions">${projectSelector()}${button("task-create", "新建任务", "plus", taskWritable() ? "" : "disabled")}</div></div><form id="taskSearch" class="toolbar"><input name="keyword" aria-label="搜索任务" placeholder="搜索任务" value="${esc(f.keyword)}"><select name="status" aria-label="任务状态">${enumOptions(statuses, f.status, "全部状态")}</select><select name="priority" aria-label="优先级">${enumOptions(priorities, f.priority, "全部优先级")}</select><select name="groupId" aria-label="小组">${options(state.groups, f.groupId, "全部小组")}</select><select name="sortBy" aria-label="排序字段">${enumOptions({ endDate: "截止日期", createdAt: "创建时间", priority: "优先级" }, f.sortBy || "endDate")}</select><select name="sortOrder" aria-label="排序方向">${enumOptions({ asc: "升序", desc: "降序" }, f.sortOrder || "asc")}</select><label><input type="checkbox" name="mine" ${f.mine ? "checked" : ""}>只看我的</label><button class="btn-secondary" type="submit">${icon("search")}搜索</button></form>${table(["任务", "小组", "负责人", "截止", "状态", "优先级"], taskRows(result.data))}${pager(result.meta, "task")}`;
+    `<div class="page-heading"><h1>任务</h1><div class="head-actions">${projectSelector()}${button("task-create", "新建任务", "plus", taskWritable() ? "" : "disabled")}</div></div><form id="taskSearch" class="toolbar"><input name="keyword" aria-label="搜索任务" placeholder="搜索任务" value="${esc(f.keyword)}"><select name="status" aria-label="任务状态">${enumOptions(statuses, f.status, "全部状态")}</select><select name="priority" aria-label="优先级">${enumOptions(priorities, f.priority, "全部优先级")}</select><select name="groupId" aria-label="小组">${options(state.groups, f.groupId, "全部小组")}</select><select name="sortBy" aria-label="排序字段">${enumOptions({ endDate: "截止时间", createdAt: "创建时间", priority: "优先级" }, f.sortBy || "endDate")}</select><select name="sortOrder" aria-label="排序方向">${enumOptions({ asc: "升序", desc: "降序" }, f.sortOrder || "asc")}</select><label><input type="checkbox" name="mine" ${f.mine ? "checked" : ""}>只看我的</label><button class="btn-secondary" type="submit">${icon("search")}搜索</button></form>${table(["任务", "小组", "负责人", "截止", "状态", "优先级"], taskRows(result.data))}${pager(result.meta, "task")}`;
 }
 async function settingsView() {
   $("#view").innerHTML =
@@ -808,14 +836,20 @@ async function taskEditor(id) {
   openDialog(
     task ? "编辑任务" : "新建任务",
     field("标题", "title", task?.title, "text", 'required maxlength="200"') +
-      `<label class="field"><span>详细内容</span><textarea class="task-detail" name="detail" maxlength="10000">${esc(task?.detail)}</textarea></label><div class="field-grid">${selectField("所属小组", "groupId", options(groups, task?.group.id, "选择小组"))}${selectField("负责人", "assigneeId", '<option value="">先选择小组</option>')}</div><div class="field-grid">${field("开始日期", "startDate", task?.startDate || (task ? "" : today()), "date")}${field("截止日期", "endDate", task?.endDate || (task ? "" : dateAfter(2)), "date", "required")}</div><div class="field-grid">${selectField("状态", "status", enumOptions(statuses, task?.status || "todo"))}${selectField("优先级", "priority", enumOptions(priorities, task?.priority || "medium"))}</div>`,
+      `<label class="field"><span>详细内容</span><textarea class="task-detail" name="detail" maxlength="10000">${esc(task?.detail)}</textarea></label><div class="field-grid">${selectField("所属小组", "groupId", options(groups, task?.group.id, "选择小组"))}${selectField("负责人", "assigneeId", '<option value="">先选择小组</option>')}</div><div class="field-grid">${field("开始时间", "startDate", task?.startDate || (task ? "" : dateTimeAfter(0, 9, 0)), "datetime-local", 'step="1800"')}${field("截止时间", "endDate", task?.endDate || (task ? "" : dateTimeAfter(2, 18, 0)), "datetime-local", 'step="1800" required')}</div><div class="field-grid">${selectField("状态", "status", enumOptions(statuses, task?.status || "todo"))}${selectField("优先级", "priority", enumOptions(priorities, task?.priority || "medium"))}</div>`,
     taskWritable()
       ? async (data) => {
-          if (data.startDate && data.startDate > data.endDate)
-            throw new Error("开始日期不能晚于截止日期");
+          const startDate = normalizeTaskDateTime(data.startDate);
+          const endDate = normalizeTaskDateTime(data.endDate);
+          if (data.startDate && !startDate)
+            throw new Error("开始时间必须按 30 分钟对齐");
+          if (!endDate) throw new Error("截止时间必须按 30 分钟对齐");
+          if (startDate && startDate > endDate)
+            throw new Error("开始时间不能晚于截止时间");
           const input = {
             ...data,
-            startDate: data.startDate || null,
+            startDate: startDate || null,
+            endDate,
             detail: data.detail || null,
           };
           try {
@@ -830,7 +864,7 @@ async function taskEditor(id) {
               task = (await api.task(state.team.id, state.project.id, task.id))
                 .data;
               throw new Error(
-                `任务已被更新，当前状态为“${statuses[task.status]}”，截止 ${task.endDate}。你的输入已保留；再次保存将应用这些修改。`,
+                `任务已被更新，当前状态为“${statuses[task.status]}”，截止 ${formatTaskDateTime(task.endDate)}。你的输入已保留；再次保存将应用这些修改。`,
               );
             }
             throw error;
@@ -1582,7 +1616,9 @@ root.addEventListener("pointerup", () => {
         if (state.gantt) state.gantt.tasks = state.tasks;
         current.bar.removeAttribute("data-saving");
         current.bar.title = `${result.data.title}: ${
-          result.data.startDate || "未设置开始日期"
+          result.data.startDate
+            ? formatTaskDateTime(result.data.startDate)
+            : "未设置开始时间"
         } ~ ${result.data.endDate}`;
         const scheduleTable = $("#scheduleTable");
         if (scheduleTable)

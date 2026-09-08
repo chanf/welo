@@ -702,6 +702,17 @@ components:
     TaskPriority:
       type: string
       enum: [low, medium, high, urgent]
+    TaskDateTime:
+      type: string
+      pattern: '^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):(00|30)$'
+      example: '2026-09-10T09:30'
+      description: 本地任务时间，分钟按 30 分钟对齐
+    TaskNullableDateTime:
+      type: string
+      nullable: true
+      pattern: '^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):(00|30)$'
+      example: '2026-09-10T09:30'
+      description: 本地任务时间，分钟按 30 分钟对齐；可为空
     RegisterRequest:
       type: object
       required: [username, email, password, passwordConfirmation]
@@ -772,8 +783,8 @@ components:
         detail: { type: string, maxLength: 10000, nullable: true }
         groupId: { $ref: '#/components/schemas/Id' }
         assigneeId: { $ref: '#/components/schemas/Id' }
-        startDate: { type: string, format: date, nullable: true }
-        endDate: { type: string, format: date }
+        startDate: { $ref: '#/components/schemas/TaskNullableDateTime' }
+        endDate: { $ref: '#/components/schemas/TaskDateTime' }
         status: { $ref: '#/components/schemas/TaskStatus' }
         priority: { $ref: '#/components/schemas/TaskPriority' }
     TaskUpdateRequest:
@@ -784,8 +795,8 @@ components:
         detail: { type: string, maxLength: 10000, nullable: true }
         groupId: { $ref: '#/components/schemas/Id' }
         assigneeId: { $ref: '#/components/schemas/Id' }
-        startDate: { type: string, format: date, nullable: true }
-        endDate: { type: string, format: date }
+        startDate: { $ref: '#/components/schemas/TaskNullableDateTime' }
+        endDate: { $ref: '#/components/schemas/TaskDateTime' }
         status: { $ref: '#/components/schemas/TaskStatus' }
         priority: { $ref: '#/components/schemas/TaskPriority' }
         expectedUpdatedAt: { type: string, format: date-time }
@@ -793,8 +804,8 @@ components:
       type: object
       required: [endDate, expectedUpdatedAt]
       properties:
-        startDate: { type: string, format: date, nullable: true }
-        endDate: { type: string, format: date }
+        startDate: { $ref: '#/components/schemas/TaskNullableDateTime' }
+        endDate: { $ref: '#/components/schemas/TaskDateTime' }
         expectedUpdatedAt: { type: string, format: date-time }
     User:
       type: object
@@ -877,9 +888,9 @@ components:
               required: [color]
               properties:
                 color: { type: string, pattern: '^#[0-9A-Fa-f]{6}$' }
-        startDate: { type: string, format: date, nullable: true }
-        endDate: { type: string, format: date }
-        renderStartDate: { type: string, format: date }
+        startDate: { $ref: '#/components/schemas/TaskNullableDateTime' }
+        endDate: { $ref: '#/components/schemas/TaskDateTime' }
+        renderStartDate: { $ref: '#/components/schemas/TaskDateTime' }
         isVirtualStart: { type: boolean }
         status: { $ref: '#/components/schemas/TaskStatus' }
         priority: { $ref: '#/components/schemas/TaskPriority' }
@@ -1033,8 +1044,8 @@ components:
             range:
               type: object
               properties:
-                startDate: { type: string, format: date }
-                endDate: { type: string, format: date }
+                startDate: { $ref: '#/components/schemas/TaskDateTime' }
+                endDate: { $ref: '#/components/schemas/TaskDateTime' }
                 granularity: { type: string, enum: [day, week, month] }
             tasks:
               type: array
