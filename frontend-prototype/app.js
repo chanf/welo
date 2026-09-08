@@ -720,11 +720,10 @@ function responsiveDayWidth() {
   const containerWidth = target.clientWidth;
   const timeline = state.ganttTimeline;
   if (!timeline || !containerWidth) return ganttConfig().dayWidth;
-  const config = ganttConfig();
   const labelWidth = 220;
   const available = containerWidth - labelWidth;
-  if (available <= 0) return config.dayWidth;
-  return Math.max(config.dayWidth, available / timeline.days);
+  if (available <= 0) return ganttConfig().dayWidth;
+  return available / timeline.days;
 }
 function drawGantt() {
   const target = $("#ganttPanel");
