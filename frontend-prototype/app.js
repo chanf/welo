@@ -1506,6 +1506,13 @@ root.addEventListener("click", (event) => {
             button.dataset.granularity === state.filters.granularity,
           ),
         );
+      if (state.project) {
+        const { data: gantt } = await api.gantt(state.team.id, state.project.id, {
+          granularity: state.filters.granularity,
+        });
+        state.gantt = gantt;
+        state.tasks = gantt?.tasks ?? [];
+      }
       resetGanttTimeline();
       drawGantt();
     }
