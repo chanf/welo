@@ -1221,6 +1221,12 @@ root.addEventListener("click", (event) => {
       );
   });
 });
+root.addEventListener("dblclick", (event) => {
+  const bar = event.target.closest("[data-task-id]");
+  if (!bar?.dataset.taskId) return;
+  event.preventDefault();
+  taskEditor(bar.dataset.taskId);
+});
 root.addEventListener(
   "cancel",
   (event) => {
@@ -1353,10 +1359,7 @@ root.addEventListener("pointerup", () => {
   if (!drag) return;
   const current = drag;
   drag = null;
-  if (!current.delta) {
-    drawGantt();
-    return;
-  }
+  if (!current.delta) return;
   current.bar.dataset.saving = "true";
   busy(null, async () => {
     try {

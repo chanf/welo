@@ -297,7 +297,7 @@ svg {
   pointer-events: none;
 }
 .bar.dashed {
-  pointer-events: none;
+  cursor: pointer;
 }
 .task-info .task-title {
   display: block;
