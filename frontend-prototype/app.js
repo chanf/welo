@@ -1383,7 +1383,17 @@ root.addEventListener("pointerup", () => {
         state.tasks = state.tasks.map((t) =>
           t.id === result.data.id ? result.data : t,
         );
-        await navigate("workspace");
+        if (state.gantt) state.gantt.tasks = state.tasks;
+        current.bar.removeAttribute("data-saving");
+        current.bar.title = `${result.data.title}: ${
+          result.data.startDate || "未设置开始日期"
+        } ~ ${result.data.endDate}`;
+        const scheduleTable = $("#scheduleTable");
+        if (scheduleTable)
+          scheduleTable.innerHTML = table(
+            ["任务", "小组", "负责人", "开始", "截止", "状态"],
+            taskRows(state.tasks, true),
+          );
         toast("排期已保存");
       }
     } catch (error) {
