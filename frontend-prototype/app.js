@@ -664,31 +664,6 @@ async function toggleGanttFullscreen() {
 function ganttHeader(startDate, days, config, dayWidth) {
   const granularity = state.filters.granularity || "day";
   const now = nowTaskDateTime();
-  const definitions =
-    granularity === "hour"
-      ? Array.from({ length: 24 }, (_, hour) => ({
-          label: pad(hour),
-          ariaLabel: `${pad(hour)}:00 至 ${pad((hour + 1) % 24)}:00`,
-          active: now.slice(0, 13) === `${startDate.slice(0, 10)}T${pad(hour)}`,
-        }))
-      : granularity === "halfDay"
-        ? [
-            {
-              label: "上午",
-              ariaLabel: "00:00 至 12:00",
-              active:
-                now.slice(0, 10) === startDate.slice(0, 10) &&
-                Number(now.slice(11, 13)) < 12,
-            },
-            {
-              label: "下午",
-              ariaLabel: "12:00 至 24:00",
-              active:
-                now.slice(0, 10) === startDate.slice(0, 10) &&
-                Number(now.slice(11, 13)) >= 12,
-            },
-          ]
-        : [];
 
   if (granularity === "day") {
     const cells = Array.from({ length: days }, (_, index) => {
@@ -699,19 +674,32 @@ function ganttHeader(startDate, days, config, dayWidth) {
     return `<div class="timeline-cells granularity-day">${cells}</div>`;
   }
 
-  const cellWidth = dayWidth / (granularity === "hour" ? 24 : 2);
+  if (granularity === "halfDay") {
+    const groups = Array.from({ length: days }, (_, index) => {
+      const date = addDays(startDate, index);
+      const isToday = date === now.slice(0, 10);
+      const isMorningActive =
+        now.slice(0, 10) === date && Number(now.slice(11, 13)) < 12;
+      const isAfternoonActive =
+        now.slice(0, 10) === date && Number(now.slice(11, 13)) >= 12;
+      return `<div class="day-group${isToday ? " today" : ""}" style="width:${dayWidth}px"><div class="day-group-label"><strong>${date.slice(5)}</strong><span>周${weekdayName(date)}</span></div><div class="day-cells"><div class="gantt-cell${isMorningActive ? " current" : ""}" style="width:${dayWidth / 2}px" aria-label="${date} 上午">上午</div><div class="gantt-cell${isAfternoonActive ? " current" : ""}" style="width:${dayWidth / 2}px" aria-label="${date} 下午">下午</div></div></div>`;
+    }).join("");
+    return `<div class="timeline-cells granularity-halfDay">${groups}</div>`;
+  }
+
+  const hourWidth = dayWidth / 24;
   const groups = Array.from({ length: days }, (_, index) => {
     const date = addDays(startDate, index);
     const isToday = date === now.slice(0, 10);
-    const cells = definitions
-      .map(
-        (cell) =>
-          `<div class="gantt-cell${cell.active ? " current" : ""}" style="width:${cellWidth}px" aria-label="${date} ${cell.ariaLabel}">${cell.label}</div>`,
-      )
-      .join("");
+    const cells = Array.from({ length: 24 }, (_, hour) => {
+      const label = hour % 3 === 0 ? pad(hour) : "";
+      const isActive =
+        isToday && Number(now.slice(11, 13)) === hour;
+      return `<div class="gantt-cell${isActive ? " current" : ""}" style="width:${hourWidth}px" aria-label="${date} ${pad(hour)}:00">${label}</div>`;
+    }).join("");
     return `<div class="day-group${isToday ? " today" : ""}" style="width:${dayWidth}px"><div class="day-group-label"><strong>${date.slice(5)}</strong><span>周${weekdayName(date)}</span></div><div class="day-cells">${cells}</div></div>`;
   }).join("");
-  return `<div class="timeline-cells granularity-${granularity}">${groups}</div>`;
+  return `<div class="timeline-cells granularity-hour">${groups}</div>`;
 }
 
 function responsiveDayWidth() {
