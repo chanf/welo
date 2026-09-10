@@ -169,6 +169,7 @@ const GANTT_GRANULARITIES = {
     edgeDays: 1,
     snapHalfHours: 2,
     cellHalfHours: 2,
+    minDayWidth: 336,
   },
   halfDay: {
     label: "半天",
@@ -180,6 +181,7 @@ const GANTT_GRANULARITIES = {
     edgeDays: 7,
     snapHalfHours: 24,
     cellHalfHours: 24,
+    minDayWidth: 72,
   },
   day: {
     label: "天",
@@ -191,6 +193,7 @@ const GANTT_GRANULARITIES = {
     edgeDays: 14,
     snapHalfHours: 48,
     cellHalfHours: 48,
+    minDayWidth: 40,
   },
 };
 const ganttConfig = () =>
@@ -616,7 +619,13 @@ function taskGanttRows(
     .join("");
 }
 
-function assigneeRows(timelineStart, pixelsPerHalfHour, timelineWidth, config, dayWidth) {
+function assigneeRows(
+  timelineStart,
+  pixelsPerHalfHour,
+  timelineWidth,
+  config,
+  dayWidth,
+) {
   return assigneeGanttRows()
     .map((person) => {
       const rowHeight = Math.max(65, person.laneCount * 38 + 18);
@@ -666,15 +675,24 @@ function ganttHeader(startDate, days, config, dayWidth) {
   const now = nowTaskDateTime();
 
   if (granularity === "day") {
+    const labelMode =
+      dayWidth >= 72 ? "full" : dayWidth >= 52 ? "date" : "compact";
     const cells = Array.from({ length: days }, (_, index) => {
       const date = addDays(startDate, index);
       const isToday = date === now.slice(0, 10);
-      return `<div class="gantt-cell day-cell${isToday ? " current" : ""}" style="width:${dayWidth}px" title="${date}" aria-label="${date}，周${weekdayName(date)}"><strong>${date.slice(5)}</strong><span>周${weekdayName(date)}</span></div>`;
+      const label =
+        labelMode === "full"
+          ? `<strong>${date.slice(5)}</strong><span>周${weekdayName(date)}</span>`
+          : labelMode === "date"
+            ? `<strong>${date.slice(5)}</strong>`
+            : `<strong>${date.slice(8)}</strong>`;
+      return `<div class="gantt-cell day-cell day-label-${labelMode}${isToday ? " current" : ""}" style="width:${dayWidth}px" title="${date} 周${weekdayName(date)}" aria-label="${date}，周${weekdayName(date)}">${label}</div>`;
     }).join("");
     return `<div class="timeline-cells granularity-day">${cells}</div>`;
   }
 
   if (granularity === "halfDay") {
+    const halfDayLabel = dayWidth / 2 >= 42 ? ["上午", "下午"] : ["上", "下"];
     const groups = Array.from({ length: days }, (_, index) => {
       const date = addDays(startDate, index);
       const isToday = date === now.slice(0, 10);
@@ -682,19 +700,23 @@ function ganttHeader(startDate, days, config, dayWidth) {
         now.slice(0, 10) === date && Number(now.slice(11, 13)) < 12;
       const isAfternoonActive =
         now.slice(0, 10) === date && Number(now.slice(11, 13)) >= 12;
-      return `<div class="day-group${isToday ? " today" : ""}" style="width:${dayWidth}px"><div class="day-group-label"><strong>${date.slice(5)}</strong><span>周${weekdayName(date)}</span></div><div class="day-cells"><div class="gantt-cell${isMorningActive ? " current" : ""}" style="width:${dayWidth / 2}px" aria-label="${date} 上午">上午</div><div class="gantt-cell${isAfternoonActive ? " current" : ""}" style="width:${dayWidth / 2}px" aria-label="${date} 下午">下午</div></div></div>`;
+      const dayLabel =
+        dayWidth >= 112
+          ? `<strong>${date.slice(5)}</strong><span>周${weekdayName(date)}</span>`
+          : `<strong>${date.slice(5)}</strong>`;
+      return `<div class="day-group${isToday ? " today" : ""}" style="width:${dayWidth}px"><div class="day-group-label">${dayLabel}</div><div class="day-cells"><div class="gantt-cell${isMorningActive ? " current" : ""}" style="width:${dayWidth / 2}px" aria-label="${date} 上午">${halfDayLabel[0]}</div><div class="gantt-cell${isAfternoonActive ? " current" : ""}" style="width:${dayWidth / 2}px" aria-label="${date} 下午">${halfDayLabel[1]}</div></div></div>`;
     }).join("");
     return `<div class="timeline-cells granularity-halfDay">${groups}</div>`;
   }
 
   const hourWidth = dayWidth / 24;
+  const hourStep = hourWidth >= 28 ? 3 : hourWidth >= 14 ? 6 : 12;
   const groups = Array.from({ length: days }, (_, index) => {
     const date = addDays(startDate, index);
     const isToday = date === now.slice(0, 10);
     const cells = Array.from({ length: 24 }, (_, hour) => {
-      const label = hour % 3 === 0 ? pad(hour) : "";
-      const isActive =
-        isToday && Number(now.slice(11, 13)) === hour;
+      const label = hour % hourStep === 0 ? pad(hour) : "";
+      const isActive = isToday && Number(now.slice(11, 13)) === hour;
       return `<div class="gantt-cell${isActive ? " current" : ""}" style="width:${hourWidth}px" aria-label="${date} ${pad(hour)}:00">${label}</div>`;
     }).join("");
     return `<div class="day-group${isToday ? " today" : ""}" style="width:${dayWidth}px"><div class="day-group-label"><strong>${date.slice(5)}</strong><span>周${weekdayName(date)}</span></div><div class="day-cells">${cells}</div></div>`;
@@ -711,7 +733,7 @@ function responsiveDayWidth() {
   const labelWidth = 220;
   const available = containerWidth - labelWidth;
   if (available <= 0) return ganttConfig().dayWidth;
-  return available / timeline.days;
+  return Math.max(ganttConfig().minDayWidth, available / timeline.days);
 }
 function drawGantt() {
   const target = $("#ganttPanel");
@@ -736,13 +758,27 @@ function drawGantt() {
 
   const rows =
     state.ganttView === "assignees"
-      ? assigneeRows(timelineStart, pixelsPerHalfHour, timelineWidth, config, dayWidth)
-      : taskGanttRows(timelineStart, pixelsPerHalfHour, timelineWidth, config, dayWidth);
+      ? assigneeRows(
+          timelineStart,
+          pixelsPerHalfHour,
+          timelineWidth,
+          config,
+          dayWidth,
+        )
+      : taskGanttRows(
+          timelineStart,
+          pixelsPerHalfHour,
+          timelineWidth,
+          config,
+          dayWidth,
+        );
   const heading =
     state.ganttView === "assignees" ? "负责人 / 任务" : "任务 / 负责人";
   target.dataset.granularity = state.filters.granularity || "day";
   target.style.setProperty("--gantt-day-width", `${dayWidth}px`);
-  target.innerHTML = `<div class="gantt-screen-tools">${tool("gantt-fullscreen", "退出全屏", "minimize-2")}</div><div class="gantt-inner"><div class="timeline-head" style="grid-template-columns:220px ${timelineWidth}px"><div class="timeline-spacer">${heading}</div>${ticks}</div>${rows}</div>`;
+  target.style.setProperty("--gantt-half-day-width", `${dayWidth / 2}px`);
+  target.style.setProperty("--gantt-hour-width", `${dayWidth / 24}px`);
+  target.innerHTML = `<div class="gantt-screen-tools">${tool("gantt-fullscreen", "退出全屏", "minimize-2")}</div><div class="gantt-inner" style="min-width:${timelineWidth + 220}px"><div class="timeline-head" style="grid-template-columns:220px ${timelineWidth}px"><div class="timeline-spacer">${heading}</div>${ticks}</div>${rows}</div>`;
   updateGanttFullscreenControls();
   if (!timeline.initialized) {
     timeline.scrollLeft = Math.max(
@@ -768,11 +804,13 @@ function extendGanttTimeline(viewport, direction) {
   const target = $("#ganttPanel");
   target.scrollLeft =
     direction === "left"
-      ? previousScrollLeft + config.extensionDays * (state.ganttDayWidth || config.dayWidth)
+      ? previousScrollLeft +
+        config.extensionDays * (state.ganttDayWidth || config.dayWidth)
       : previousScrollLeft;
   timeline.scrollLeft = target.scrollLeft;
   if (direction === "left" && ganttPan?.viewport === viewport)
-    ganttPan.startScrollLeft += config.extensionDays * (state.ganttDayWidth || config.dayWidth);
+    ganttPan.startScrollLeft +=
+      config.extensionDays * (state.ganttDayWidth || config.dayWidth);
   timeline.extending = false;
 }
 function pager(meta, prefix) {
@@ -1495,9 +1533,13 @@ root.addEventListener("click", (event) => {
           ),
         );
       if (state.project) {
-        const { data: gantt } = await api.gantt(state.team.id, state.project.id, {
-          granularity: state.filters.granularity,
-        });
+        const { data: gantt } = await api.gantt(
+          state.team.id,
+          state.project.id,
+          {
+            granularity: state.filters.granularity,
+          },
+        );
         state.gantt = gantt;
         state.tasks = gantt?.tasks ?? [];
       }
@@ -1637,7 +1679,8 @@ root.addEventListener(
     const timeline = state.ganttTimeline;
     if (!viewport || !timeline || timeline.extending) return;
     timeline.scrollLeft = viewport.scrollLeft;
-    const edgeWidth = ganttConfig().edgeDays * (state.ganttDayWidth || ganttConfig().dayWidth);
+    const edgeWidth =
+      ganttConfig().edgeDays * (state.ganttDayWidth || ganttConfig().dayWidth);
     if (viewport.scrollLeft <= edgeWidth) extendGanttTimeline(viewport, "left");
     else if (
       viewport.scrollLeft + viewport.clientWidth >=

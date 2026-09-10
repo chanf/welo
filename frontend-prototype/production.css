@@ -294,11 +294,11 @@ svg {
     linear-gradient(to right, var(--grid-line) 1px, transparent 1px);
   background-size:
     var(--gantt-day-width) 100%,
-    32px 100%;
+    var(--gantt-hour-width) 100%;
 }
 
 .track.granularity-halfDay {
-  background-size: 64px 100%;
+  background-size: var(--gantt-half-day-width) 100%;
 }
 
 .track.granularity-day {
@@ -315,6 +315,7 @@ svg {
 }
 .gantt {
   position: relative;
+  overflow-x: auto;
 }
 .gantt-screen-tools {
   display: none;

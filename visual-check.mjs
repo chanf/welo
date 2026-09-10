@@ -1,7 +1,9 @@
 import { chromium } from "./frontend-prototype/node_modules/playwright/index.mjs";
 
 const browser = await chromium.launch({ channel: "chrome" });
-const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+const context = await browser.newContext({
+  viewport: { width: 1440, height: 900 },
+});
 const page = await context.newPage();
 
 await page.goto("http://localhost:5173");
@@ -19,9 +21,14 @@ await page.waitForSelector("#ganttPanel .timeline-head");
 
 const results = [];
 for (const granularity of ["hour", "halfDay", "day"]) {
-  await page.selectOption("#granularity", granularity);
+  await page
+    .locator(
+      `[data-action="granularity-change"][data-granularity="${granularity}"]`,
+    )
+    .click();
   await page.waitForFunction(
-    (value) => document.querySelector("#ganttPanel")?.dataset.granularity === value,
+    (value) =>
+      document.querySelector("#ganttPanel")?.dataset.granularity === value,
     granularity,
   );
   const panel = page.locator("#ganttPanel");
@@ -30,15 +37,28 @@ for (const granularity of ["hour", "halfDay", "day"]) {
     await page.evaluate((value) => {
       const header = document.querySelector(".timeline-cells");
       const track = document.querySelector(".track");
-      const cells = [...document.querySelectorAll(".gantt-cell, .day-group-label")];
+      const cells = [
+        ...document.querySelectorAll(".gantt-cell, .day-group-label"),
+      ];
       return {
         granularity: value,
         headerWidth: header.getBoundingClientRect().width,
         trackWidth: track.getBoundingClientRect().width,
-        aligned: Math.abs(header.getBoundingClientRect().left - track.getBoundingClientRect().left) < 1,
-        overflowingCells: cells.filter((cell) => cell.scrollWidth > cell.clientWidth).length,
+        aligned:
+          Math.abs(
+            header.getBoundingClientRect().left -
+              track.getBoundingClientRect().left,
+          ) < 1,
+        overflowingCells: cells.filter(
+          (cell) => cell.scrollWidth > cell.clientWidth,
+        ).length,
         cellCount: document.querySelectorAll(".gantt-cell").length,
         backgroundSize: getComputedStyle(track).backgroundSize,
+        dayWidth: parseFloat(
+          getComputedStyle(
+            document.querySelector("#ganttPanel"),
+          ).getPropertyValue("--gantt-day-width"),
+        ),
       };
     }, granularity),
   );
@@ -46,7 +66,9 @@ for (const granularity of ["hour", "halfDay", "day"]) {
 
 await page.locator('[data-action="gantt-view"][data-view="assignees"]').click();
 await page.waitForSelector(".assignee-track");
-await page.locator("#ganttPanel").screenshot({ path: "/tmp/welo-gantt-assignees.png" });
+await page
+  .locator("#ganttPanel")
+  .screenshot({ path: "/tmp/welo-gantt-assignees.png" });
 
 const mobileContext = await browser.newContext({
   viewport: { width: 390, height: 844 },
@@ -55,7 +77,9 @@ const mobileContext = await browser.newContext({
 const mobilePage = await mobileContext.newPage();
 await mobilePage.goto("http://localhost:5173/#workspace");
 await mobilePage.waitForSelector("#ganttPanel .timeline-head");
-await mobilePage.locator("#ganttPanel").screenshot({ path: "/tmp/welo-gantt-mobile.png" });
+await mobilePage
+  .locator("#ganttPanel")
+  .screenshot({ path: "/tmp/welo-gantt-mobile.png" });
 
 console.log(JSON.stringify(results, null, 2));
 await browser.close();
