@@ -649,11 +649,18 @@ function assigneeRows(
     .join("");
 }
 
+function isGanttFullscreen() {
+  const panel = $("#ganttPanel");
+  return Boolean(
+    panel &&
+    (document.fullscreenElement === panel ||
+      panel.classList.contains("gantt-fallback-fullscreen")),
+  );
+}
+
 function updateGanttFullscreenControls() {
   const panel = $("#ganttPanel");
-  const active =
-    document.fullscreenElement === panel ||
-    panel?.classList.contains("gantt-fallback-fullscreen");
+  const active = isGanttFullscreen();
   document
     .querySelectorAll('[data-action="gantt-fullscreen"]')
     .forEach((button) => {
@@ -1761,7 +1768,13 @@ root.addEventListener(
 );
 root.addEventListener("pointerdown", (event) => {
   const bar = event.target.closest("[data-task-id]");
-  if (!bar || !taskWritable() || bar.dataset.saving || event.button !== 0)
+  if (
+    !bar ||
+    !isGanttFullscreen() ||
+    !taskWritable() ||
+    bar.dataset.saving ||
+    event.button !== 0
+  )
     return;
   const task = state.tasks.find((t) => t.id === bar.dataset.taskId);
   if (!task || task.isVirtualStart) return;
