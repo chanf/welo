@@ -773,6 +773,7 @@
         box-shadow: 0 12px 28px rgba(0, 0, 0, 0.08);
       }
       [data-theme="solaris"] .view-switch,
+      [data-theme="solaris"] .zoom-controls,
       [data-theme="solaris"] .role,
       [data-theme="solaris"] .btn-secondary {
         background: var(--control-bg);
@@ -984,6 +985,22 @@
         background: white;
         color: var(--ink);
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+      }
+      .zoom-controls {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        padding: 3px;
+        background: #eef2ee;
+        border-radius: 7px;
+      }
+      .zoom-controls .icon-btn {
+        width: 28px;
+        height: 28px;
+        border-radius: 5px;
+      }
+      .zoom-controls .icon-btn:hover {
+        background: var(--white);
       }
       .gantt {
         overflow-x: auto;

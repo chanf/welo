@@ -25,6 +25,8 @@ import {
   CalendarDays,
   Maximize2,
   Minimize2,
+  ZoomIn,
+  ZoomOut,
 } from "lucide";
 
 const icons = {
@@ -53,6 +55,8 @@ const icons = {
   CalendarDays,
   Maximize2,
   Minimize2,
+  ZoomIn,
+  ZoomOut,
 };
 import { api } from "./api.js";
 import "./production.css";
@@ -92,6 +96,7 @@ const state = {
   gantt: null,
   ganttTimeline: null,
   ganttView: "tasks",
+  ganttZoomLevel: 0,
   projectPage: 1,
   taskPage: 1,
   adminPage: 1,
@@ -198,6 +203,7 @@ const GANTT_GRANULARITIES = {
 };
 const ganttConfig = () =>
   GANTT_GRANULARITIES[state.filters.granularity] ?? GANTT_GRANULARITIES.day;
+const GANTT_ZOOM_STEPS = [1, 1.5, 2, 3, 4, 6, 8];
 const GANTT_TASK_COLORS = [
   "#2563EB",
   "#DC2626",
@@ -230,6 +236,13 @@ const ganttViewSwitch = () =>
 const granularitySwitch = () => {
   const g = state.filters.granularity || "day";
   return `<div class="view-switch granularity-switch" role="radiogroup" aria-label="时间粒度"><button type="button" role="radio" aria-checked="${g === "hour"}" data-action="granularity-change" data-granularity="hour" class="${g === "hour" ? "active" : ""}">小时</button><button type="button" role="radio" aria-checked="${g === "halfDay"}" data-action="granularity-change" data-granularity="halfDay" class="${g === "halfDay" ? "active" : ""}">半天</button><button type="button" role="radio" aria-checked="${g === "day"}" data-action="granularity-change" data-granularity="day" class="${g === "day" ? "active" : ""}">天</button></div>`;
+};
+const ganttZoomLevel = () =>
+  Math.min(GANTT_ZOOM_STEPS.length - 1, Math.max(0, state.ganttZoomLevel ?? 0));
+const ganttZoomControls = () => {
+  const level = ganttZoomLevel();
+  const factor = GANTT_ZOOM_STEPS[level];
+  return `<div class="zoom-controls" role="group" aria-label="甘特图缩放">${tool("gantt-zoom-out", `缩小甘特图（当前 ${factor}x）`, "zoom-out", level <= 0 ? "disabled" : "")}${tool("gantt-zoom-in", `放大甘特图（当前 ${factor}x）`, "zoom-in", level >= GANTT_ZOOM_STEPS.length - 1 ? "disabled" : "")}</div>`;
 };
 const ganttFullscreenButton = () =>
   tool("gantt-fullscreen", "全屏显示甘特图", "maximize-2");
@@ -474,7 +487,7 @@ async function workspace(gen) {
       )
       .join(
         "",
-      )}</section><div class="workspace-grid"><section class="panel"><div class="panel-head"><div><h2>${esc(state.project?.name || "项目排期")}</h2><p>${state.tasks.length} 个可见任务</p></div><div class="head-actions">${projectSelector()}${granularitySwitch()}${tool("toggle-view", "切换甘特图与列表", "list")}${ganttViewSwitch()}${tool("gantt-today", "回到今天", "calendar-days")}${ganttFullscreenButton()}</div></div><div id="ganttPanel" class="gantt"></div><div id="scheduleTable" hidden>${table(["任务", "小组", "负责人", "开始", "截止", "状态"], taskRows(state.tasks, true))}</div></section><aside class="side-stack"><section class="panel"><div class="panel-head"><h2>即将到期</h2></div><div class="deadline-list">${d.upcomingDeadlines.map((t) => `<div class="deadline"><div class="date-box"><b>${esc(t.endDate.slice(8, 10))}</b><small>${esc(t.endDate.slice(5, 7))}月</small></div><div class="deadline-name">${esc(t.title)}<small>${esc(t.assignee.username)}</small></div></div>`).join("") || empty("暂无即将到期任务")}</div></section><section class="panel"><div class="panel-head"><h2>团队小组</h2></div><div class="members">${state.groups.map((g) => `<div class="member-row"><div class="avatar green">${esc(g.name.slice(0, 1))}</div><div class="identity">${esc(g.name)}<small>${g.memberCount} 位成员 · ${g.status === "active" ? "正常" : "已停用"}</small></div></div>`).join("") || empty("暂无小组")}</div></section></aside></div>`;
+      )}</section><div class="workspace-grid"><section class="panel"><div class="panel-head"><div><h2>${esc(state.project?.name || "项目排期")}</h2><p>${state.tasks.length} 个可见任务</p></div><div class="head-actions">${projectSelector()}${granularitySwitch()}${ganttZoomControls()}${tool("toggle-view", "切换甘特图与列表", "list")}${ganttViewSwitch()}${tool("gantt-today", "回到今天", "calendar-days")}${ganttFullscreenButton()}</div></div><div id="ganttPanel" class="gantt"></div><div id="scheduleTable" hidden>${table(["任务", "小组", "负责人", "开始", "截止", "状态"], taskRows(state.tasks, true))}</div></section><aside class="side-stack"><section class="panel"><div class="panel-head"><h2>即将到期</h2></div><div class="deadline-list">${d.upcomingDeadlines.map((t) => `<div class="deadline"><div class="date-box"><b>${esc(t.endDate.slice(8, 10))}</b><small>${esc(t.endDate.slice(5, 7))}月</small></div><div class="deadline-name">${esc(t.title)}<small>${esc(t.assignee.username)}</small></div></div>`).join("") || empty("暂无即将到期任务")}</div></section><section class="panel"><div class="panel-head"><h2>团队小组</h2></div><div class="members">${state.groups.map((g) => `<div class="member-row"><div class="avatar green">${esc(g.name.slice(0, 1))}</div><div class="identity">${esc(g.name)}<small>${g.memberCount} 位成员 · ${g.status === "active" ? "正常" : "已停用"}</small></div></div>`).join("") || empty("暂无小组")}</div></section></aside></div>`;
   drawGantt();
 }
 function resetGanttTimeline() {
@@ -733,7 +746,8 @@ function responsiveDayWidth() {
   const labelWidth = 220;
   const available = containerWidth - labelWidth;
   if (available <= 0) return ganttConfig().dayWidth;
-  return Math.max(ganttConfig().minDayWidth, available / timeline.days);
+  const zoom = GANTT_ZOOM_STEPS[ganttZoomLevel()] ?? 1;
+  return Math.max(ganttConfig().minDayWidth, available / timeline.days) * zoom;
 }
 function drawGantt() {
   const target = $("#ganttPanel");
@@ -741,6 +755,7 @@ function drawGantt() {
   if (!state.gantt || !state.tasks.length) {
     state.ganttTimeline = null;
     target.innerHTML = empty("暂无任务");
+    updateGanttZoomControls();
     return;
   }
 
@@ -780,6 +795,7 @@ function drawGantt() {
   target.style.setProperty("--gantt-hour-width", `${dayWidth / 24}px`);
   target.innerHTML = `<div class="gantt-screen-tools">${tool("gantt-fullscreen", "退出全屏", "minimize-2")}</div><div class="gantt-inner" style="min-width:${timelineWidth + 220}px"><div class="timeline-head" style="grid-template-columns:220px ${timelineWidth}px"><div class="timeline-spacer">${heading}</div>${ticks}</div>${rows}</div>`;
   updateGanttFullscreenControls();
+  updateGanttZoomControls();
   if (!timeline.initialized) {
     timeline.scrollLeft = Math.max(
       0,
@@ -789,6 +805,55 @@ function drawGantt() {
     timeline.initialized = true;
   }
   target.scrollLeft = timeline.scrollLeft;
+}
+
+function updateGanttZoomControls() {
+  const level = ganttZoomLevel();
+  const factor = GANTT_ZOOM_STEPS[level];
+  const hasTimeline = Boolean(state.ganttTimeline);
+  document
+    .querySelectorAll(
+      '[data-action="gantt-zoom-in"], [data-action="gantt-zoom-out"]',
+    )
+    .forEach((button) => {
+      const zoomIn = button.dataset.action === "gantt-zoom-in";
+      const atBound = zoomIn
+        ? level >= GANTT_ZOOM_STEPS.length - 1
+        : level <= 0;
+      const label = `${zoomIn ? "放大" : "缩小"}甘特图（当前 ${factor}x）`;
+      button.disabled = !hasTimeline || atBound;
+      button.setAttribute("aria-label", label);
+      button.setAttribute("title", label);
+    });
+}
+
+function setGanttZoom(direction) {
+  const viewport = $("#ganttPanel");
+  const timeline = state.ganttTimeline;
+  if (!viewport || !timeline || timeline.extending) return;
+  const level = ganttZoomLevel();
+  const nextLevel = level + direction;
+  if (nextLevel < 0 || nextLevel >= GANTT_ZOOM_STEPS.length) return;
+
+  const oldDayWidth = state.ganttDayWidth || ganttConfig().dayWidth;
+  const labelWidth = 220;
+  const centerHalfHours = Math.max(
+    0,
+    (viewport.scrollLeft + viewport.clientWidth / 2 - labelWidth) /
+      (oldDayWidth / 48),
+  );
+
+  state.ganttZoomLevel = nextLevel;
+  drawGantt();
+
+  const newDayWidth = state.ganttDayWidth || oldDayWidth;
+  timeline.scrollLeft = Math.max(
+    0,
+    labelWidth +
+      centerHalfHours * (newDayWidth / 48) -
+      viewport.clientWidth / 2,
+  );
+  viewport.scrollLeft = timeline.scrollLeft;
 }
 
 function extendGanttTimeline(viewport, direction) {
@@ -1445,6 +1510,10 @@ root.addEventListener("click", (event) => {
   }
   const action = node.dataset.action,
     id = node.dataset.id;
+  if (action === "gantt-zoom-in" || action === "gantt-zoom-out") {
+    setGanttZoom(action === "gantt-zoom-in" ? 1 : -1);
+    return;
+  }
   busy(node, async () => {
     if (action === "session-retry") restoreSession();
     if (action === "theme") theme();
