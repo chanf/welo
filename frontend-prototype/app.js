@@ -73,12 +73,15 @@ const esc = (value) =>
   );
 const icon = (name) => `<i data-lucide="${name}" aria-hidden="true"></i>`;
 const labels = {
+  onboarding: "团队引导",
   workspace: "工作台",
   projects: "项目",
   tasks: "任务",
-  team: "成员与小组",
+  team: "团队与成员",
+  invitations: "我的邀请",
+  trash: "回收站",
+  activity: "操作记录",
   settings: "个人设置",
-  admin: "超管后台",
 };
 const statuses = { todo: "待办", in_progress: "进行中", done: "已完成" };
 const priorities = { low: "低", medium: "中", high: "高", urgent: "紧急" };
@@ -89,7 +92,7 @@ const state = {
   team: null,
   projects: [],
   project: null,
-  groups: [],
+  members: [],
   page: "workspace",
   generation: 0,
   tasks: [],
@@ -99,14 +102,17 @@ const state = {
   ganttZoomLevel: 0,
   projectPage: 1,
   taskPage: 1,
-  adminPage: 1,
+  invitationPage: 1,
+  trashPage: 1,
+  activityPage: 1,
+  trashType: "project",
   filters: {},
 };
 let toastTimer,
   modalSave,
   modalBusy = false,
   returnFocus;
-const admin = () => state.user?.systemRole === "super_admin";
+const admin = () => state.team?.role === "admin";
 const writable = () => state.team?.status === "active";
 const taskWritable = () => writable() && state.project?.status === "active";
 const dateAfter = (days) => {
@@ -256,6 +262,15 @@ const taskColor = (task) => {
 };
 const options = (items, value = "", blank = null) =>
   `${blank === null ? "" : `<option value="">${esc(blank)}</option>`}${items.map((x) => `<option value="${esc(x.id)}" ${String(x.id) === String(value) ? "selected" : ""}>${esc(x.name ?? x.username)}</option>`).join("")}`;
+const teamOptions = () =>
+  state.teams
+    .map((team) => ({
+      id: team.id,
+      name: `${team.name} · ${team.role === "admin" ? "管理员" : "成员"}${
+        team.status === "archived" ? " · 已归档" : ""
+      }`,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, "zh-Hans-CN"));
 const enumOptions = (items, value, blank) =>
   options(
     Object.entries(items).map(([id, name]) => ({ id, name })),
@@ -336,15 +351,18 @@ function renderAuth(mode = "login", message = "") {
 function shell() {
   drag = null;
   const nav = Object.entries(labels)
-    .filter(([key]) => key !== "admin" || admin())
+    .filter(
+      ([key]) =>
+        key !== "onboarding" && (!state.team || key !== "invitations" || true),
+    )
     .map(
       ([key, label]) =>
-        `<button class="nav-item ${state.page === key ? "active" : ""}" data-page="${key}">${icon({ workspace: "layout-dashboard", projects: "folder-kanban", tasks: "check-check", team: "users-round", settings: "settings-2", admin: "shield-check" }[key])}${label}</button>`,
+        `<button class="nav-item ${state.page === key ? "active" : ""}" data-page="${key}">${icon({ onboarding: "users-round", workspace: "layout-dashboard", projects: "folder-kanban", tasks: "check-check", team: "users-round", invitations: "user-plus", trash: "trash-2", activity: "list", settings: "settings-2" }[key])}${label}</button>`,
     )
     .join("");
-  root.innerHTML = `<div class="app"><aside class="sidebar"><div class="brand"><div class="brand-mark">W</div><span>welo</span></div><label class="field"><span>当前团队</span><select id="teamSelect" aria-label="当前团队">${options(state.teams, state.team?.id, state.teams.length ? null : "尚未加入团队")}</select></label><nav class="nav">${nav}</nav><div class="sidebar-bottom">${button("logout", "退出登录", "log-out")}<div class="user-mini"><div class="avatar green">${esc(state.user.username.slice(0, 1))}</div><div class="identity"><div class="name">${esc(state.user.username)}</div><small>${admin() ? "超级管理员" : "普通成员"}</small></div></div></div></aside><main class="main"><header class="topbar"><div class="crumbs"><strong>Welo</strong><span>${esc(state.team?.name ?? "未分配团队")}</span>${icon("chevron-right")}<strong id="pageTitle">${labels[state.page]}</strong></div><div class="top-actions">${tool("theme", "切换主题", "sun-moon")}${tool("refresh", "刷新当前页面", "refresh-cw")}<select id="mobileNav" aria-label="页面导航">${options(
+  root.innerHTML = `<div class="app"><aside class="sidebar"><div class="brand"><div class="brand-mark">W</div><span>welo</span></div><label class="field"><span>当前团队</span><select id="teamSelect" aria-label="当前团队">${options(teamOptions(), state.team?.id, state.teams.length ? null : "尚未加入团队")}</select></label><nav class="nav">${nav}</nav><div class="sidebar-bottom">${button("logout", "退出登录", "log-out")}<div class="user-mini"><div class="avatar green">${esc(state.user.username.slice(0, 1))}</div><div class="identity"><div class="name">${esc(state.user.username)}</div><small>${state.team ? (admin() ? "团队管理员" : "团队成员") : "尚未加入团队"}</small></div></div></div></aside><main class="main"><header class="topbar"><div class="crumbs"><strong>Welo</strong><span>${esc(state.team?.name ?? "未加入团队")}</span>${icon("chevron-right")}<strong id="pageTitle">${labels[state.page]}</strong></div><div class="top-actions">${tool("theme", "切换主题", "sun-moon")}${tool("refresh", "刷新当前页面", "refresh-cw")}<select id="mobileNav" aria-label="页面导航">${options(
     Object.entries(labels)
-      .filter(([key]) => key !== "admin" || admin())
+      .filter(([key]) => key !== "onboarding")
       .map(([id, name]) => ({ id, name })),
     state.page,
   )}</select>${tool("mobile-team", "切换团队", "users-round")}</div></header><section class="page-view" id="view" aria-live="polite"></section></main></div>${utilities()}`;
@@ -360,14 +378,14 @@ async function initialize() {
   }));
   let saved;
   try {
-    saved = localStorage.getItem("welo-team");
+    saved = localStorage.getItem(`welo-team:${state.user.id}`);
   } catch {}
   state.team =
     state.teams.find((x) => x.id === saved) ?? state.teams[0] ?? null;
   state.page = labels[location.hash.slice(1)]
     ? location.hash.slice(1)
     : "workspace";
-  if (state.page === "admin" && !admin()) state.page = "workspace";
+  if (!state.team) state.page = "onboarding";
   state.project = null;
   state.filters = {};
   state.authStatus = "authenticated";
@@ -379,17 +397,17 @@ async function loadTeam() {
   $("#view").innerHTML = empty("正在加载团队...");
   try {
     state.projects = [];
-    state.groups = [];
+    state.members = [];
     state.tasks = [];
     state.gantt = null;
     if (state.team) {
-      const [projects, groups] = await Promise.all([
+      const [projects, members] = await Promise.all([
         allProjects(state.team.id),
-        api.groups(state.team.id),
+        api.members(state.team.id),
       ]);
       if (gen !== state.generation) return;
       state.projects = projects;
-      state.groups = groups.data;
+      state.members = members.data;
       state.project =
         projects.find((p) => p.id === state.project?.id) ?? projects[0] ?? null;
     }
@@ -414,8 +432,13 @@ function showLoadError(error, action = "refresh") {
 async function navigate(page) {
   drag = null;
   if (!state.user) return;
-  state.page =
-    labels[page] && (page !== "admin" || admin()) ? page : "workspace";
+  state.page = labels[page] ? page : "workspace";
+  if (
+    !state.team &&
+    !["onboarding", "invitations", "settings"].includes(state.page)
+  )
+    state.page = "onboarding";
+  if (state.team && state.page === "onboarding") state.page = "workspace";
   history.replaceState(null, "", `#${state.page}`);
   $("#pageTitle").textContent = labels[state.page];
   $("#mobileNav").value = state.page;
@@ -426,21 +449,17 @@ async function navigate(page) {
     );
   const gen = ++state.generation;
   $("#view").innerHTML = empty("正在加载...");
-  if (!state.team && !["settings", "admin"].includes(state.page)) {
-    $("#view").innerHTML =
-      empty("尚未加入团队，请联系管理员分配团队。") +
-      (admin() ? button("team-create", "创建团队") : "");
-    hydrate();
-    return;
-  }
   try {
     await {
+      onboarding: onboardingView,
       workspace: workspace,
       projects: projectsView,
       tasks: tasksView,
       team: teamView,
+      invitations: invitationsView,
+      trash: trashView,
+      activity: activityView,
       settings: settingsView,
-      admin: adminView,
     }[state.page](gen);
   } catch (error) {
     if (gen === state.generation) showLoadError(error);
@@ -454,7 +473,7 @@ function taskRows(tasks, schedule = false) {
   return tasks
     .map(
       (t) =>
-        `<tr><td><button class="text-link" data-action="task-edit" data-id="${esc(t.id)}">${esc(t.title)}</button></td><td>${esc(t.group.name)}</td><td>${esc(t.assignee.username)}</td>${schedule ? `<td>${esc(formatTaskDateTime(t.startDate))}</td>` : ""}<td>${esc(formatTaskDateTime(t.endDate))}</td><td><span class="status ${esc(t.status)}">${esc(statuses[t.status])}</span></td>${schedule ? "" : `<td>${esc(priorities[t.priority])}</td>`}</tr>`,
+        `<tr><td><button class="text-link" data-action="task-edit" data-id="${esc(t.id)}">${esc(t.title)}</button></td><td>${esc(t.assignee.username)}${t.assignee.isActiveMember === false ? "（已离队）" : ""}</td>${schedule ? `<td>${esc(formatTaskDateTime(t.startDate))}</td>` : ""}<td>${esc(formatTaskDateTime(t.endDate))}</td><td><span class="status ${esc(t.status)}">${esc(statuses[t.status])}</span></td>${schedule ? "" : `<td>${esc(priorities[t.priority])}</td>`}</tr>`,
     )
     .join("");
 }
@@ -487,7 +506,7 @@ async function workspace(gen) {
       )
       .join(
         "",
-      )}</section><div class="workspace-grid"><section class="panel"><div class="panel-head"><div><h2>${esc(state.project?.name || "项目排期")}</h2><p>${state.tasks.length} 个可见任务</p></div><div class="head-actions">${projectSelector()}${granularitySwitch()}${ganttZoomControls()}${tool("toggle-view", "切换甘特图与列表", "list")}${ganttViewSwitch()}${tool("gantt-today", "回到今天", "calendar-days")}${ganttFullscreenButton()}</div></div><div id="ganttPanel" class="gantt"></div><div id="scheduleTable" hidden>${table(["任务", "小组", "负责人", "开始", "截止", "状态"], taskRows(state.tasks, true))}</div></section><aside class="side-stack"><section class="panel"><div class="panel-head"><h2>即将到期</h2></div><div class="deadline-list">${d.upcomingDeadlines.map((t) => `<div class="deadline"><div class="date-box"><b>${esc(t.endDate.slice(8, 10))}</b><small>${esc(t.endDate.slice(5, 7))}月</small></div><div class="deadline-name">${esc(t.title)}<small>${esc(t.assignee.username)}</small></div></div>`).join("") || empty("暂无即将到期任务")}</div></section><section class="panel"><div class="panel-head"><h2>团队小组</h2></div><div class="members">${state.groups.map((g) => `<div class="member-row"><div class="avatar green">${esc(g.name.slice(0, 1))}</div><div class="identity">${esc(g.name)}<small>${g.memberCount} 位成员 · ${g.status === "active" ? "正常" : "已停用"}</small></div></div>`).join("") || empty("暂无小组")}</div></section></aside></div>`;
+      )}</section><div class="workspace-grid"><section class="panel"><div class="panel-head"><div><h2>${esc(state.project?.name || "项目排期")}</h2><p>${state.tasks.length} 个可见任务</p></div><div class="head-actions">${projectSelector()}${granularitySwitch()}${ganttZoomControls()}${tool("toggle-view", "切换甘特图与列表", "list")}${ganttViewSwitch()}${tool("gantt-today", "回到今天", "calendar-days")}${ganttFullscreenButton()}</div></div><div id="ganttPanel" class="gantt"></div><div id="scheduleTable" hidden>${table(["任务", "负责人", "开始", "截止", "状态"], taskRows(state.tasks, true))}</div></section><aside class="side-stack"><section class="panel"><div class="panel-head"><h2>即将到期</h2></div><div class="deadline-list">${d.upcomingDeadlines.map((t) => `<div class="deadline"><div class="date-box"><b>${esc(t.endDate.slice(8, 10))}</b><small>${esc(t.endDate.slice(5, 7))}月</small></div><div class="deadline-name">${esc(t.title)}<small>${esc(t.assignee.username)}</small></div></div>`).join("") || empty("暂无即将到期任务")}</div></section><section class="panel"><div class="panel-head"><h2>团队成员</h2></div><div class="members">${state.members.map((m) => `<div class="member-row"><div class="avatar green" style="background:${ganttColor(m.user.color)}">${esc(m.user.username.slice(0, 1))}</div><div class="identity">${esc(m.user.username)}<small>${m.openTaskCount} 个未完成 · ${m.role === "admin" ? "管理员" : "成员"}</small></div></div>`).join("") || empty("暂无成员")}</div></section></aside></div>`;
   drawGantt();
 }
 function resetGanttTimeline() {
@@ -627,7 +646,7 @@ function taskGanttRows(
   return state.tasks
     .map(
       (task) =>
-        `<div class="timeline-row" style="grid-template-columns:220px ${timelineWidth}px"><div class="task-info"><button class="task-title text-link" data-action="task-edit" data-id="${esc(task.id)}">${esc(task.title)}</button><div class="task-meta">${esc(task.group.name)} · ${esc(task.assignee.username)}</div></div><div class="track granularity-${esc(state.filters.granularity || "day")}" style="--gantt-day-width:${dayWidth}px">${ganttBar(task, timelineStart, pixelsPerHalfHour, timelineWidth, task.assignee.color)}</div></div>`,
+        `<div class="timeline-row" style="grid-template-columns:220px ${timelineWidth}px"><div class="task-info"><button class="task-title text-link" data-action="task-edit" data-id="${esc(task.id)}">${esc(task.title)}</button><div class="task-meta">${esc(task.assignee.username)} </div></div><div class="track granularity-${esc(state.filters.granularity || "day")}" style="--gantt-day-width:${dayWidth}px">${ganttBar(task, timelineStart, pixelsPerHalfHour, timelineWidth, task.assignee.color)}</div></div>`,
     )
     .join("");
 }
@@ -911,7 +930,6 @@ async function tasksView(gen) {
         keyword: f.keyword,
         status: f.status,
         priority: f.priority,
-        groupId: f.groupId,
         assigneeId: f.mine ? state.user.id : "",
         sortBy: f.sortBy || "endDate",
         sortOrder: f.sortOrder || "asc",
@@ -920,13 +938,14 @@ async function tasksView(gen) {
   if (gen !== state.generation) return;
   state.tasks = result.data;
   $("#view").innerHTML =
-    `<div class="page-heading"><h1>任务</h1><div class="head-actions">${projectSelector()}${button("task-create", "新建任务", "plus", taskWritable() ? "" : "disabled")}</div></div><form id="taskSearch" class="toolbar"><input name="keyword" aria-label="搜索任务" placeholder="搜索任务" value="${esc(f.keyword)}"><select name="status" aria-label="任务状态">${enumOptions(statuses, f.status, "全部状态")}</select><select name="priority" aria-label="优先级">${enumOptions(priorities, f.priority, "全部优先级")}</select><select name="groupId" aria-label="小组">${options(state.groups, f.groupId, "全部小组")}</select><select name="sortBy" aria-label="排序字段">${enumOptions({ endDate: "截止时间", createdAt: "创建时间", priority: "优先级" }, f.sortBy || "endDate")}</select><select name="sortOrder" aria-label="排序方向">${enumOptions({ asc: "升序", desc: "降序" }, f.sortOrder || "asc")}</select><label><input type="checkbox" name="mine" ${f.mine ? "checked" : ""}>只看我的</label><button class="btn-secondary" type="submit">${icon("search")}搜索</button></form>${table(["任务", "小组", "负责人", "截止", "状态", "优先级"], taskRows(result.data))}${pager(result.meta, "task")}`;
+    `<div class="page-heading"><h1>任务</h1><div class="head-actions">${projectSelector()}${button("task-create", "新建任务", "plus", taskWritable() ? "" : "disabled")}</div></div><form id="taskSearch" class="toolbar"><input name="keyword" aria-label="搜索任务" placeholder="搜索任务" value="${esc(f.keyword)}"><select name="status" aria-label="任务状态">${enumOptions(statuses, f.status, "全部状态")}</select><select name="priority" aria-label="优先级">${enumOptions(priorities, f.priority, "全部优先级")}</select><select name="sortBy" aria-label="排序字段">${enumOptions({ endDate: "截止时间", createdAt: "创建时间", priority: "优先级" }, f.sortBy || "endDate")}</select><select name="sortOrder" aria-label="排序方向">${enumOptions({ asc: "升序", desc: "降序" }, f.sortOrder || "asc")}</select><label><input type="checkbox" name="mine" ${f.mine ? "checked" : ""}>只看我的</label><button class="btn-secondary" type="submit">${icon("search")}搜索</button></form>${table(["任务", "负责人", "截止", "状态", "优先级"], taskRows(result.data))}${pager(result.meta, "task")}`;
 }
 async function settingsView() {
   $("#view").innerHTML =
     `<div class="page-heading"><h1>个人设置</h1></div><form id="profileForm" class="profile-form">${field("用户名", "username", state.user.username, "text", 'required minlength="2" maxlength="32"')}${field("邮箱", "email", state.user.email, "email", 'required maxlength="255"')}<button class="btn-primary" type="submit">${icon("save")}保存修改</button></form><div class="setting-row"><strong>外观</strong>${button("theme", "切换主题", "sun-moon")}</div>`;
 }
 async function adminView(gen) {
+  return navigate("team");
   const [overview, users] = await Promise.all([
     api.adminOverview(),
     api.adminUsers({
@@ -956,10 +975,10 @@ async function adminView(gen) {
       )}</div><form class="toolbar" id="userSearch"><input name="keyword" aria-label="搜索人员" placeholder="搜索人员" value="${esc(state.filters.userKeyword)}"><select name="systemRole" aria-label="系统角色">${enumOptions({ member: "普通成员", super_admin: "超级管理员" }, state.filters.userRole, "全部角色")}</select><button class="btn-secondary" type="submit">${icon("search")}搜索</button></form>${table(["人员", "邮箱", "系统角色", "操作"], users.data.map((u) => `<tr><td>${esc(u.username)}</td><td>${esc(u.email)}</td><td>${u.systemRole === "super_admin" ? "超级管理员" : "普通成员"}</td><td>${tool("role-edit", "修改角色", "shield-check", `data-id="${esc(u.id)}" data-role="${u.systemRole}" ${String(u.id) === state.user.id ? "disabled" : ""}`)}</td></tr>`).join(""))}${pager(users.meta, "admin")}`;
 }
 async function teamView(gen) {
-  const members = admin() ? (await api.members(state.team.id)).data : [];
+  const members = (await api.members(state.team.id)).data;
   if (gen !== state.generation) return;
   $("#view").innerHTML =
-    `<div class="page-heading"><h1>${esc(state.team.name)}</h1><div class="head-actions">${admin() ? button("team-edit", "团队设置", "settings-2") + button("group-create", "新建小组", "plus", writable() ? "" : "disabled") + button("member-add", "添加成员", "user-plus", writable() ? "" : "disabled") : ""}</div></div><p class="page-subtitle">${state.team.status === "active" ? "正常" : "已归档"} · ${esc(state.team.description)}</p>${table(["小组", "状态", "成员", "操作"], state.groups.map((g) => `<tr><td>${esc(g.name)}</td><td>${g.status === "active" ? "正常" : "已停用"}</td><td>${g.memberCount}</td><td>${tool("group-members", "查看成员", "users-round", `data-id="${g.id}"`)}${admin() ? tool("group-edit", "编辑小组", "pencil", `data-id="${g.id}" ${writable() ? "" : "disabled"}`) : ""}</td></tr>`).join(""))}${admin() ? `<h2 class="subheading">团队成员</h2>${table(["人员", "邮箱", "操作"], members.map((m) => `<tr><td>${esc(m.user.username)}</td><td>${esc(m.user.email)}</td><td>${tool("member-remove", "移除成员", "user-minus", `data-id="${esc(m.user.id)}" ${writable() ? "" : "disabled"}`)}</td></tr>`).join(""))}` : ""}`;
+    `<div class="page-heading"><h1>${esc(state.team.name)}</h1><div class="head-actions">${button("team-edit", "团队设置", "settings-2", writable() ? "" : "disabled")}${admin() ? button("invite", "邀请成员", "user-plus", writable() ? "" : "disabled") : button("leave-team", "退出团队", "log-out", writable() ? "" : "disabled")}</div></div><p class="page-subtitle">${state.team.status === "active" ? "正常" : "已归档"} · ${esc(state.team.description || "")}</p>${table(["人员", "角色", "未完成任务", "操作"], members.map((m) => `<tr><td>${esc(m.user.username)}</td><td><span class="role ${m.role === "admin" ? "admin" : ""}">${m.role === "admin" ? "管理员" : "成员"}</span></td><td>${m.openTaskCount}</td><td>${admin() && m.user.id !== state.user.id ? tool("member-remove", "移除成员", "user-minus", `data-id="${esc(m.user.id)}"`) : ""}</td></tr>`).join(""))}`;
 }
 
 function openDialog(title, body, save, extra = "") {
@@ -983,7 +1002,7 @@ async function refreshData() {
     state.projects.find((p) => p.id === state.project?.id) ??
     state.projects[0] ??
     null;
-  state.groups = state.team ? (await api.groups(state.team.id)).data : [];
+  state.members = state.team ? (await api.members(state.team.id)).data : [];
   await navigate(state.page);
 }
 async function projectEditor(id) {
@@ -1007,7 +1026,11 @@ async function projectEditor(id) {
         : ""),
     async (data) => {
       const input = { ...data, description: data.description || null };
-      if (p) await api.updateProject(state.team.id, p.id, input);
+      if (p)
+        await api.updateProject(state.team.id, p.id, {
+          ...input,
+          expectedUpdatedAt: p.updatedAt,
+        });
       else {
         const result = await api.createProject(state.team.id, input);
         state.project = result.data;
@@ -1021,12 +1044,12 @@ async function projectEditor(id) {
           "project-delete",
           "删除项目",
           "trash-2",
-          `data-id="${p.id}" data-name="${esc(p.name)}"`,
+          `data-id="${p.id}" data-name="${esc(p.name)}" data-updated-at="${esc(p.updatedAt)}"`,
         )
       : "",
   );
 }
-async function taskEditor(id) {
+async function taskEditorLegacy(id) {
   if (!state.project) return;
   let task = id
     ? (await api.task(state.team.id, state.project.id, id)).data
@@ -1102,6 +1125,137 @@ async function taskEditor(id) {
   if (task) await loadAssignees(task.group.id, task.assignee.id);
 }
 let assigneeRequest = 0;
+// V2 task editor: every active team member can edit every business field.
+async function taskEditor(id) {
+  if (!state.project) return;
+  let task = id
+    ? (await api.task(state.team.id, state.project.id, id)).data
+    : null;
+  const users = state.members
+    .filter((m) => m.status === "active")
+    .map((m) => ({ ...m.user, name: m.user.username }));
+  openDialog(
+    task ? "编辑任务" : "新建任务",
+    field("标题", "title", task?.title, "text", 'required maxlength="200"') +
+      `<label class="field"><span>详细内容</span><textarea name="detail" maxlength="10000">${esc(task?.detail)}</textarea></label>` +
+      selectField(
+        "负责人",
+        "assigneeId",
+        options(users, task?.assignee.id, "选择负责人"),
+      ) +
+      `<div class="field-grid">${field("开始时间", "startDate", task?.startDate || (task ? "" : dateTimeAfter(0, 9, 0)), "datetime-local", 'step="1800"')}${field("截止时间", "endDate", task?.endDate || dateTimeAfter(2, 18, 0), "datetime-local", 'step="1800" required')}</div>` +
+      `<div class="field-grid">${selectField("状态", "status", enumOptions(statuses, task?.status || "todo"))}${selectField("优先级", "priority", enumOptions(priorities, task?.priority || "medium"))}</div>`,
+    taskWritable()
+      ? async (data) => {
+          const startDate = normalizeTaskDateTime(data.startDate);
+          const endDate = normalizeTaskDateTime(data.endDate);
+          if (data.startDate && !startDate)
+            throw new Error("开始时间必须按 30 分钟对齐");
+          if (!endDate || (startDate && startDate > endDate))
+            throw new Error("时间范围无效");
+          const input = {
+            ...data,
+            startDate: startDate || null,
+            endDate,
+            detail: data.detail || null,
+          };
+          if (task)
+            await api.updateTask(state.team.id, state.project.id, task.id, {
+              ...input,
+              expectedUpdatedAt: task.updatedAt,
+            });
+          else await api.createTask(state.team.id, state.project.id, input);
+          closeDialog(true);
+          await refreshData();
+          toast("任务已保存");
+        }
+      : null,
+    task
+      ? tool("task-delete", "删除任务", "trash-2", `data-id="${task.id}"`)
+      : "",
+  );
+  if (!taskWritable())
+    $("#dialogForm")
+      .querySelectorAll("input,textarea,select")
+      .forEach((x) => (x.disabled = true));
+}
+
+async function onboardingView() {
+  const invitations = await api
+    .myInvitations({ status: "pending" })
+    .catch(() => ({ data: [] }));
+  $("#view").innerHTML =
+    `<div class="page-heading"><h1>开始使用 Welo</h1></div><p class="page-subtitle">创建一个团队，或处理其他团队发来的邀请。</p><section class="panel"><div class="panel-head"><h2>创建团队</h2></div><div class="panel-body">${button("team-create", "创建团队", "plus")}</div></section><section class="panel"><div class="panel-head"><h2>我的邀请</h2></div>${invitations.data?.length ? invitations.data.map((i) => `<div class="member-row"><div class="identity"><strong>${esc(i.team.name)}</strong><small>${esc(i.inviter.username)} 邀请你加入</small></div>${button("invitation-accept", "接受", "check", `data-id="${i.id}`)}${button("invitation-decline", "拒绝", "x", `data-id="${i.id}`)}</div>`).join("") : empty("暂无待处理邀请")}</section>`;
+}
+
+async function invitationsView() {
+  return onboardingView();
+}
+async function organizationEditorLegacy(kind, id) {
+  const current = kind === "team" && id ? state.team : null;
+  openDialog(
+    `${current ? "编辑" : "创建"}团队`,
+    field(
+      "名称",
+      "name",
+      current?.name,
+      "text",
+      'required minlength="2" maxlength="64"',
+    ) +
+      field(
+        "描述",
+        "description",
+        current?.description,
+        "text",
+        'maxlength="500"',
+      ),
+    async (data) => {
+      const input = { name: data.name, description: data.description || null };
+      if (current)
+        await api.updateTeam(current.id, {
+          ...input,
+          expectedUpdatedAt: current.updatedAt,
+        });
+      else await api.createTeam(input);
+      state.teams = (await api.teams()).data.map((t) => ({
+        ...t,
+        id: String(t.id),
+      }));
+      state.team = current
+        ? state.teams.find((t) => t.id === current.id)
+        : state.teams.at(-1);
+      closeDialog(true);
+      shell();
+      await loadTeam();
+      toast("团队已保存");
+    },
+  );
+}
+async function inviteMember() {
+  openDialog(
+    "邀请成员",
+    field("用户名或邮箱", "account", "", "text", "required") +
+      field("留言", "message", "", "text", 'maxlength="500"'),
+    async (data) => {
+      await api.invite(state.team.id, {
+        account: data.account,
+        message: data.message || null,
+      });
+      closeDialog(true);
+      toast("邀请已发送");
+    },
+  );
+}
+async function trashView() {
+  $("#view").innerHTML =
+    `<div class="page-heading"><h1>回收站</h1></div><p class="page-subtitle">已删除的项目和任务可在 30 天内恢复。</p>`;
+}
+async function activityView() {
+  const result = await api.activity(state.team.id, { page: 1, pageSize: 50 });
+  $("#view").innerHTML =
+    `<div class="page-heading"><h1>操作记录</h1></div>${table(["时间", "操作", "对象"], result.data.map((x) => `<tr><td>${esc(x.createdAt)}</td><td>${esc(x.action)}</td><td>${esc(x.entityType)} #${esc(x.entityId)}</td></tr>`).join(""))}`;
+}
+
 async function loadAssignees(groupId, value = "", autoSelect = false) {
   const gen = ++assigneeRequest;
   const node = $('#dialog [name="assigneeId"]');
@@ -1485,7 +1639,7 @@ root.addEventListener("change", (event) =>
       state.filters = {};
       state.projectPage = state.taskPage = 1;
       try {
-        localStorage.setItem("welo-team", node.value);
+        localStorage.setItem(`welo-team:${state.user.id}`, node.value);
       } catch {}
       shell();
       await loadTeam();
@@ -1500,12 +1654,6 @@ root.addEventListener("change", (event) =>
       const endDate = $('#dialog [name="endDate"]');
       if (endDate) endDate.value = addDays(node.value, 3);
     }
-    if (node.name === "groupId" && node.closest("#dialog"))
-      await loadAssignees(
-        node.value,
-        "",
-        node.closest("#dialogForm")?.dataset.autoAssignee === "true",
-      );
   }),
 );
 root.addEventListener("click", (event) => {
@@ -1550,14 +1698,20 @@ root.addEventListener("click", (event) => {
       closeDialog();
       confirmDialog(
         "删除项目",
-        () => api.deleteProject(state.team.id, id, node.dataset.name),
+        () =>
+          api.deleteProject(state.team.id, id, {
+            expectedUpdatedAt: node.dataset.updatedAt,
+          }),
         node.dataset.name,
       );
     }
     if (action === "task-delete") {
       closeDialog();
       confirmDialog("删除任务", () =>
-        api.deleteTask(state.team.id, state.project.id, id),
+        api.deleteTask(state.team.id, state.project.id, id, {
+          expectedUpdatedAt: state.tasks.find((task) => task.id === id)
+            ?.updatedAt,
+        }),
       );
     }
     if (action === "toggle-view") {
@@ -1632,6 +1786,20 @@ root.addEventListener("click", (event) => {
         "team",
         action === "team-edit" ? state.team.id : null,
       );
+    if (action === "invite") await inviteMember();
+    if (action === "invitation-accept") {
+      await api.acceptInvitation(id);
+      await initialize();
+    }
+    if (action === "invitation-decline") {
+      await api.declineInvitation(id);
+      await initialize();
+    }
+    if (action === "leave-team") {
+      await api.leaveTeam(state.team.id);
+      state.team = null;
+      await initialize();
+    }
     if (action === "group-create" || action === "group-edit")
       await organizationEditor("group", id);
     if (action === "group-members") await groupMembers(id);

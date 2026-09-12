@@ -2,7 +2,7 @@ export type ErrorDetail = { field?: string; reason: string };
 
 export class ApiError extends Error {
   constructor(
-    readonly status: 400 | 401 | 403 | 404 | 409 | 423 | 429 | 500,
+    readonly status: 400 | 401 | 403 | 404 | 409 | 410 | 423 | 429 | 500,
     readonly code: string,
     message: string,
     readonly details: ErrorDetail[] = [],

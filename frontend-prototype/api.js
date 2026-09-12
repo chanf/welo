@@ -2,6 +2,7 @@ const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL ?? "").replace(
   /\/$/,
   "",
 );
+
 export class ApiRequestError extends Error {
   constructor(message, options = {}) {
     super(message);
@@ -15,11 +16,13 @@ export class ApiRequestError extends Error {
     });
   }
 }
+
 export async function apiFetch(path, options = {}) {
   const headers = new Headers(options.headers);
   headers.set("Accept", "application/json");
   if (options.body && !headers.has("Content-Type"))
     headers.set("Content-Type", "application/json");
+
   let response;
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
@@ -34,6 +37,7 @@ export async function apiFetch(path, options = {}) {
       code: "NETWORK_ERROR",
     });
   }
+
   const payload = await response.json().catch(() => null);
   const requestId =
     payload?.meta?.requestId ?? response.headers.get("X-Request-Id") ?? "";
@@ -51,22 +55,26 @@ export async function apiFetch(path, options = {}) {
     });
   return payload;
 }
+
 export const query = (params = {}) => {
   const value = new URLSearchParams(
     Object.entries(params).filter(([, v]) => v !== "" && v != null),
   );
   return value.toString() ? `?${value}` : "";
 };
+
 const id = (value) => encodeURIComponent(String(value));
 const team = (t) => `/teams/${id(t)}`;
 const project = (t, p) => `${team(t)}/projects/${id(p)}`;
 const task = (t, p, k) => `${project(t, p)}/tasks/${id(k)}`;
 const get = (path, params) => apiFetch(`/api/v1${path}${query(params)}`);
-const send = (path, method, body) =>
+const send = (path, method, body, headers) =>
   apiFetch(`/api/v1${path}`, {
     method,
+    headers,
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
+
 export const api = {
   me: () => get("/auth/me"),
   login: (x) => send("/auth/login", "POST", x),
@@ -74,35 +82,45 @@ export const api = {
   logout: () => send("/auth/logout", "POST"),
   profile: (x) => send("/users/me", "PATCH", x),
   teams: () => get("/teams"),
-  createTeam: (x) => send("/teams", "POST", x),
+  createTeam: (x) =>
+    send("/teams", "POST", x, {
+      "Idempotency-Key": crypto.randomUUID(),
+    }),
   updateTeam: (t, x) => send(team(t), "PATCH", x),
-  members: (t) => get(`${team(t)}/members`),
-  addMember: (t, u) => send(`${team(t)}/members`, "POST", { userId: u }),
+  archiveTeam: (t, x) => send(`${team(t)}/archive`, "POST", x),
+  restoreTeam: (t, x) => send(`${team(t)}/restore`, "POST", x),
+  members: (t, status = "active") => get(`${team(t)}/members`, { status }),
   removeMember: (t, u) => send(`${team(t)}/members/${id(u)}`, "DELETE"),
-  groups: (t) => get(`${team(t)}/groups`),
-  createGroup: (t, x) => send(`${team(t)}/groups`, "POST", x),
-  updateGroup: (t, g, x) => send(`${team(t)}/groups/${id(g)}`, "PATCH", x),
-  groupMembers: (t, g) => get(`${team(t)}/groups/${id(g)}/members`),
-  addGroupMember: (t, g, u) =>
-    send(`${team(t)}/groups/${id(g)}/members`, "POST", { userId: u }),
-  removeGroupMember: (t, g, u) =>
-    send(`${team(t)}/groups/${id(g)}/members/${id(u)}`, "DELETE"),
+  leaveTeam: (t) => send(`${team(t)}/leave`, "POST"),
+  teamInvitations: (t, x) => get(`${team(t)}/invitations`, x),
+  invite: (t, x) => send(`${team(t)}/invitations`, "POST", x),
+  revokeInvitation: (t, k) =>
+    send(`${team(t)}/invitations/${id(k)}/revoke`, "POST", {}),
+  myInvitations: (x) => get("/users/me/invitations", x),
+  acceptInvitation: (k) =>
+    send(`/users/me/invitations/${id(k)}/accept`, "POST", {}),
+  declineInvitation: (k) =>
+    send(`/users/me/invitations/${id(k)}/decline`, "POST", {}),
   dashboard: (t) => get(`${team(t)}/dashboard`),
   projects: (t, x) => get(`${team(t)}/projects`, x),
   project: (t, p) => get(project(t, p)),
   createProject: (t, x) => send(`${team(t)}/projects`, "POST", x),
   updateProject: (t, p, x) => send(project(t, p), "PATCH", x),
-  deleteProject: (t, p, n) =>
-    send(`${project(t, p)}${query({ confirmName: n })}`, "DELETE"),
+  archiveProject: (t, p, x) => send(`${project(t, p)}/archive`, "POST", x),
+  restoreProject: (t, p, x) => send(`${project(t, p)}/restore`, "POST", x),
+  deleteProject: (t, p, x) => send(project(t, p), "DELETE", x),
   tasks: (t, p, x) => get(`${project(t, p)}/tasks`, x),
   task: (t, p, k) => get(task(t, p, k)),
   createTask: (t, p, x) => send(`${project(t, p)}/tasks`, "POST", x),
   updateTask: (t, p, k, x) => send(task(t, p, k), "PATCH", x),
-  deleteTask: (t, p, k) => send(task(t, p, k), "DELETE"),
+  deleteTask: (t, p, k, x) => send(task(t, p, k), "DELETE", x),
+  moveTask: (t, p, k, x) => send(`${task(t, p, k)}/move`, "POST", x),
   gantt: (t, p, x) => get(`${project(t, p)}/gantt`, x),
   schedule: (t, p, k, x) => send(`${task(t, p, k)}/schedule`, "PATCH", x),
-  adminOverview: () => get("/admin/overview"),
-  adminUsers: (x) => get("/admin/users", x),
-  updateRole: (u, r) =>
-    send(`/admin/users/${id(u)}/role`, "PATCH", { systemRole: r }),
+  trash: (t, x) => get(`${team(t)}/trash`, x),
+  restoreTrashProject: (t, p, x) =>
+    send(`${team(t)}/trash/projects/${id(p)}/restore`, "POST", x),
+  restoreTrashTask: (t, k, x) =>
+    send(`${team(t)}/trash/tasks/${id(k)}/restore`, "POST", x),
+  activity: (t, x) => get(`${team(t)}/activity`, x),
 };
