@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Welo · 多团队任务管理</title>
+    <title>Welo · Multi-Team Task Management</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/icons/welo-icon-180.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -20,6 +20,29 @@
         document.documentElement.dataset.theme = "light";
       }
     </script>
+    <style>
+      .lang-switcher {
+        position: relative;
+      }
+      .lang-switcher select {
+        padding: 6px 10px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: var(--paper);
+        font-size: 12px;
+        color: var(--ink);
+        cursor: pointer;
+        appearance: auto;
+      }
+      .lang-switcher select:hover {
+        border-color: var(--teal);
+      }
+      @media (max-width: 760px) {
+        .lang-switcher select {
+          font-size: 11px;
+          padding: 4px 6px;
+        }
+      }
     <style>
       :root {
         --ink: #17221f;
@@ -1822,10 +1845,11 @@
         </div>
         <div class="session-loading">
           <span class="session-spinner" aria-hidden="true"></span>
-          <p role="status">正在恢复会话...</p>
+          <p role="status" data-i18n="session.loading">Restoring session...</p>
         </div>
       </section>
     </div>
+    <script type="module" src="./i18n.js"></script>
     <script type="module" src="./app.js"></script>
   </body>
 </html>

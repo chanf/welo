@@ -13,6 +13,10 @@
     "types": "wrangler types",
     "db:migrate:local": "wrangler d1 migrations apply welo --local",
     "db:migrate:remote": "wrangler d1 migrations apply welo --remote",
+    "db:seed:loadtest": "node scripts/seed-heavy-data.mjs",
+    "db:seed:loadtest:remote": "node scripts/seed-heavy-data.mjs --remote",
+    "db:normalize-task-dates": "node scripts/normalize-task-dates.mjs",
+    "db:normalize-task-dates:remote": "node scripts/normalize-task-dates.mjs --remote",
     "deploy:production": "wrangler deploy --keep-vars",
     "test": "npm run build && npm run frontend:test"
   },
