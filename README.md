@@ -4,11 +4,16 @@ Welo 是一个面向多团队协作的任务管理系统。系统以团队组织
 
 当前版本为 V2，已实现真实前后端主流程，不再依赖前端 mock 数据。
 
+## 项目声明
+
+- 除第三方依赖、平台运行时和外部字体外，本项目源代码全部由 AI 生成。
+- 项目体验地址：[https://welo.909939.xyz/](https://welo.909939.xyz/)
+
 ## 首页截图
 
 ![Welo 软件首页截图](./screen/screen1.png)
 
-新版团队协作方案见 [团队协作与权限完整设计文档](./Docs/团队协作与权限设计文档.md)：所有用户可自行创建团队，创建者担任团队管理员，团队内成员共享项目和任务操作权限。该文档为待实施设计，下文仍说明当前 V1 实现。
+新版团队协作方案见 [团队协作与权限完整设计文档](./Docs/团队协作与权限设计文档.md)：所有用户可自行创建团队，创建者担任团队管理员，团队内成员共享项目和任务操作权限。
 
 ## 核心能力
 
@@ -49,6 +54,47 @@ Cloudflare Worker (Hono API)
 | API 契约 | OpenAPI 3.0 |
 
 后端入口是 `src/index.ts`，数据库 binding 名为 `DB`。后端不保存内存会话，不依赖本地文件写入；登录会话保存在 D1 `sessions` 表中，并通过 HttpOnly Cookie 传递。
+
+## 第三方库与外部服务
+
+### 直接依赖
+
+| 类别 | 名称 | 当前锁定版本 | 类型 / 许可证 | 用途 |
+| --- | --- | --- | --- | --- |
+| 后端运行依赖 | Hono | 4.13.7 | 开源，MIT | Workers API 框架、路由和 CORS 中间件 |
+| 后端运行依赖 | Zod | 4.5.4 | 开源，MIT | 请求参数与业务字段校验 |
+| 前端运行依赖 | Lucide | 1.41.0 | 开源，ISC | 图标组件与图标资源 |
+| 后端开发依赖 | TypeScript | 5.9.3 | 开源，Apache-2.0 | 类型检查 |
+| 后端开发依赖 | Wrangler | 4.129.0 | 开源，MIT OR Apache-2.0 | Workers 本地开发、D1 迁移和部署 CLI |
+| 后端开发依赖 | `@cloudflare/workers-types` | 5.20260907.1 | 开源，MIT OR Apache-2.0 | Workers Runtime 类型定义 |
+| 前端开发依赖 | Vite | 7.3.6 | 开源，MIT | 前端开发服务器与生产构建 |
+| 前端开发依赖 | Prettier | 3.9.6 | 开源，MIT | 前端代码格式化 |
+| 前端开发依赖 | `@playwright/test` | 1.63.0 | 开源，Apache-2.0 | 预留浏览器自动化测试工具，当前主测试脚本尚未执行 Playwright 用例 |
+
+### 重要传递依赖
+
+这些库未在 `package.json` 中直接声明，由上述工具引入，完整版本和许可证元数据以 [package-lock.json](./package-lock.json) 与 [frontend-prototype/package-lock.json](./frontend-prototype/package-lock.json) 为准。
+
+| 名称 | 类型 / 许可证 | 引入来源与用途 |
+| --- | --- | --- |
+| esbuild | 开源，MIT | Vite / Wrangler 构建与打包 |
+| Rollup | 开源，MIT | Vite 前端模块打包 |
+| PostCSS | 开源，MIT | Vite 样式处理 |
+| Miniflare | 开源，MIT | Wrangler 本地 Workers / D1 模拟环境 |
+| workerd | 开源，Apache-2.0 | Workers 兼容运行时实现 |
+| undici | 开源，MIT | Wrangler / 开发工具网络请求 |
+| sharp 及其平台二进制包 | 开源，Apache-2.0；部分 libvips 二进制包含 LGPL-3.0-or-later 组件 | Wrangler 工具链图片处理能力 |
+
+### 字体与外部服务
+
+| 名称 | 类型 | 说明 |
+| --- | --- | --- |
+| DM Sans、DM Mono、Noto Sans SC | 开源字体，SIL Open Font License 1.1 | 通过 Google Fonts CSS 引用；项目仓库不打包字体文件 |
+| Google Fonts | 外部字体分发服务 | 前端页面从 `fonts.googleapis.com` 加载字体 |
+| Cloudflare Workers、D1、Cron Trigger、Pages | 商业云服务，服务端实现闭源 | API 运行时、SQLite 兼容数据库、定时任务和前端托管；实际费用与可用性取决于 Cloudflare 服务计划 |
+| SQLite | 开源 / 公有领域 | D1 提供 SQLite 兼容接口；本项目的迁移和初始化 SQL 面向该兼容模型 |
+
+截至本次梳理，项目没有打包闭源 npm 库、商业 SDK、商业字体或需要按席位授权的第三方组件。部署和访问会依赖上述外部托管服务。
 
 ## 环境要求
 
