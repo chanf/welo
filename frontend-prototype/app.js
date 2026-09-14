@@ -29,6 +29,9 @@ import {
   ZoomOut,
   MessageSquare,
   Send,
+  Play,
+  RotateCcw,
+  UserRound,
 } from "lucide";
 
 const icons = {
@@ -61,6 +64,9 @@ const icons = {
   ZoomOut,
   MessageSquare,
   Send,
+  Play,
+  RotateCcw,
+  UserRound,
 };
 import { api } from "./api.js";
 import "./production.css";
@@ -536,11 +542,32 @@ async function navigate(page) {
 function projectSelector() {
   return `<select id="projectSelect" class="select" aria-label="当前项目">${options(state.projects, state.project?.id, state.projects.length ? null : "暂无项目")}</select>`;
 }
+const nextTaskStatus = {
+  todo: "in_progress",
+  in_progress: "done",
+  done: "todo",
+};
+const taskStatusActions = {
+  todo: { label: "标记为进行中", icon: "play" },
+  in_progress: { label: "标记为已完成", icon: "check" },
+  done: { label: "标记为待办", icon: "rotate-ccw" },
+};
+const taskStatusCell = (task) => {
+  const action = taskStatusActions[task.status];
+  return `<span class="status ${esc(task.status)}">${esc(statuses[task.status])}</span>${tool(
+    "task-cycle-status",
+    action.label,
+    action.icon,
+    `data-id="${esc(task.id)}" data-updated-at="${esc(task.updatedAt)}" ${
+      taskWritable() ? "" : "disabled"
+    }`,
+  )}`;
+};
 function taskRows(tasks, schedule = false) {
   return tasks
     .map(
       (t) =>
-        `<tr><td><button class="text-link" data-action="task-edit" data-id="${esc(t.id)}">${esc(t.title)}</button></td><td>${esc(t.assignee.username)}${t.assignee.isActiveMember === false ? "（已离队）" : ""}</td>${schedule ? `<td>${esc(formatTaskDateTime(t.startDate))}</td>` : ""}<td>${esc(formatTaskDateTime(t.endDate))}</td><td><span class="status ${esc(t.status)}">${esc(statuses[t.status])}</span>${!schedule && t.status !== "done" ? tool("task-complete", "标记为已完成", "check", `data-id="${esc(t.id)}" data-updated-at="${esc(t.updatedAt)}" ${taskWritable() ? "" : "disabled"}`) : ""}</td>${schedule ? "" : `<td>${esc(priorities[t.priority])}</td>`}</tr>`,
+        `<tr><td><button class="text-link" data-action="task-edit" data-id="${esc(t.id)}">${esc(t.title)}</button></td><td>${esc(t.assignee.username)}${t.assignee.isActiveMember === false ? "（已离队）" : ""}</td>${schedule ? `<td>${esc(formatTaskDateTime(t.startDate))}</td>` : ""}<td>${esc(formatTaskDateTime(t.endDate))}</td>${schedule ? `<td><span class="status ${esc(t.status)}">${esc(statuses[t.status])}</span></td>` : `<td>${taskStatusCell(t)}</td>`}${schedule ? "" : `<td>${esc(priorities[t.priority])}</td>`}</tr>`,
     )
     .join("");
 }
@@ -1825,14 +1852,29 @@ root.addEventListener("click", (event) => {
       state.taskPage = 1;
       await navigate("tasks");
     }
-    if (action === "task-complete") {
+    if (action === "task-cycle-status") {
+      const task = state.tasks.find((t) => String(t.id) === String(id));
       try {
-        await api.updateTask(state.team.id, state.project.id, id, {
-          status: "done",
-          expectedUpdatedAt: node.dataset.updatedAt,
-        });
-        await refreshData();
-        toast("任务已完成");
+        const { data: updated } = await api.updateTask(
+          state.team.id,
+          state.project.id,
+          id,
+          {
+            status: task ? nextTaskStatus[task.status] : "done",
+            expectedUpdatedAt: node.dataset.updatedAt,
+          },
+        );
+        const index = state.tasks.findIndex(
+          (t) => String(t.id) === String(updated.id),
+        );
+        if (index >= 0) state.tasks[index] = updated;
+        const cell = node.closest("td");
+        if (cell) {
+          cell.innerHTML = taskStatusCell(updated);
+          hydrate();
+          cell.querySelector("button")?.focus();
+        }
+        toast(`任务已改为${statuses[updated.status]}`);
       } catch (error) {
         if (error.code === "VERSION_CONFLICT")
           throw new Error("任务已发生变化，请刷新后重试");
