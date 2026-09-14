@@ -9,6 +9,7 @@
     "frontend:dev": "npm --prefix frontend-prototype run dev",
     "frontend:build": "npm --prefix frontend-prototype run build",
     "frontend:test": "npm --prefix frontend-prototype run test",
+    "telegram:test": "node scripts/test-telegram.mjs",
     "types": "wrangler types",
     "db:migrate:local": "wrangler d1 migrations apply welo --local",
     "db:migrate:remote": "wrangler d1 migrations apply welo --remote",
