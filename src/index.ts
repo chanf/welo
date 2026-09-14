@@ -580,7 +580,108 @@ app.post("/api/v1/users/me/invitations/:invitationId/decline", async (c) => {
 });
 
 app.all("/api/v1/teams/:teamId/groups/*", (c) => retired(c));
-app.all("/api/v1/admin/*", (c) => retired(c));
+
+const requirePlatformAdmin = (c: AppContext) => {
+  if (currentAuth(c).user.systemRole !== "super_admin") throw new ApiError(403, "FORBIDDEN", "仅超级管理员可执行此操作");
+};
+
+app.get("/api/v1/admin/overview", async (c) => {
+  requirePlatformAdmin(c);
+  const row = await c.env.DB.prepare(`
+    SELECT
+      (SELECT COUNT(*) FROM users) AS user_count,
+      (SELECT COUNT(*) FROM teams WHERE status = 'active') AS active_team_count,
+      (SELECT COUNT(*) FROM projects WHERE status = 'active' AND deleted_at IS NULL) AS in_progress_project_count,
+      (SELECT COUNT(*) FROM tasks WHERE deleted_at IS NULL) AS task_count
+  `).first<{ user_count: number; active_team_count: number; in_progress_project_count: number; task_count: number }>();
+  return ok(c, {
+    userCount: Number(row?.user_count ?? 0),
+    activeTeamCount: Number(row?.active_team_count ?? 0),
+    inProgressProjectCount: Number(row?.in_progress_project_count ?? 0),
+    taskCount: Number(row?.task_count ?? 0),
+  });
+});
+
+app.get("/api/v1/admin/users", async (c) => {
+  requirePlatformAdmin(c);
+  const { page, pageSize, offset } = pageParams(c);
+  const keyword = c.req.query("keyword")?.trim() ?? "";
+  const role = c.req.query("systemRole");
+  const clauses = ["1 = 1"];
+  const params: (number | string)[] = [];
+  if (keyword) {
+    clauses.push("(username LIKE ? OR email LIKE ?)");
+    params.push(`%${keyword}%`, `%${keyword}%`);
+  }
+  if (role === "member" || role === "super_admin") {
+    clauses.push("system_role = ?");
+    params.push(role);
+  }
+  const where = clauses.join(" AND ");
+  const count = await c.env.DB.prepare(`SELECT COUNT(*) AS count FROM users WHERE ${where}`).bind(...params).first<{ count: number }>();
+  const rows = await c.env.DB.prepare(`SELECT id, username, email, color, system_role, created_at FROM users WHERE ${where} ORDER BY id DESC LIMIT ? OFFSET ?`)
+    .bind(...params, pageSize, offset).all<AccountRow>();
+  return ok(c, rows.results.map(accountDto), 200, pagination(page, pageSize, Number(count?.count ?? 0)));
+});
+
+type PlatformProjectRow = ProjectRow & {
+  team_name: string;
+  team_status: "active" | "archived";
+  creator_username: string;
+  task_count: number;
+};
+const platformProjectDto = (row: PlatformProjectRow) => ({
+  id: String(row.id),
+  team: { id: String(row.team_id), name: row.team_name, status: row.team_status },
+  name: row.name,
+  description: row.description,
+  status: row.status,
+  deletedAt: row.deleted_at,
+  taskCount: Number(row.task_count),
+  createdBy: { id: String(row.created_by), username: row.creator_username },
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
+
+app.get("/api/v1/admin/projects", async (c) => {
+  requirePlatformAdmin(c);
+  const { page, pageSize, offset } = pageParams(c);
+  const keyword = c.req.query("keyword")?.trim() ?? "";
+  const status = c.req.query("status");
+  const teamIdValue = c.req.query("teamId");
+  const clauses = ["1 = 1"];
+  const params: (number | string)[] = [];
+  if (keyword) {
+    clauses.push("(p.name LIKE ? OR p.description LIKE ? OR t.name LIKE ?)");
+    params.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`);
+  }
+  if (status === "active" || status === "archived") {
+    clauses.push("p.status = ?");
+    params.push(status);
+  }
+  if (teamIdValue) {
+    const teamId = id(teamIdValue);
+    clauses.push("p.team_id = ?");
+    params.push(teamId);
+  }
+  const where = clauses.join(" AND ");
+  const count = await c.env.DB.prepare(`
+    SELECT COUNT(*) AS count FROM projects p JOIN teams t ON t.id = p.team_id WHERE ${where}
+  `).bind(...params).first<{ count: number }>();
+  const rows = await c.env.DB.prepare(`
+    SELECT p.*, t.name AS team_name, t.status AS team_status, u.username AS creator_username,
+      (SELECT COUNT(*) FROM tasks tk WHERE tk.project_id = p.id AND tk.deleted_at IS NULL) AS task_count
+    FROM projects p
+    JOIN teams t ON t.id = p.team_id
+    JOIN users u ON u.id = p.created_by
+    WHERE ${where}
+    ORDER BY p.updated_at DESC, p.id DESC
+    LIMIT ? OFFSET ?
+  `).bind(...params, pageSize, offset).all<PlatformProjectRow>();
+  return ok(c, rows.results.map(platformProjectDto), 200, pagination(page, pageSize, Number(count?.count ?? 0)));
+});
+
+app.all("/api/v1/admin/users/:userId/role", (c) => retired(c));
 
 app.get("/api/v1/teams/:teamId/projects", async (c) => {
   const teamId = id(c.req.param("teamId"));

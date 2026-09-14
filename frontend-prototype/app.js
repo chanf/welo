@@ -82,6 +82,7 @@ const labels = {
   trash: "回收站",
   activity: "操作记录",
   settings: "个人设置",
+  admin: "平台后台",
 };
 const statuses = { todo: "待办", in_progress: "进行中", done: "已完成" };
 const priorities = { low: "低", medium: "中", high: "高", urgent: "紧急" };
@@ -102,6 +103,7 @@ const state = {
   ganttZoomLevel: 0,
   projectPage: 1,
   taskPage: 1,
+  adminPage: 1,
   invitationPage: 1,
   trashPage: 1,
   activityPage: 1,
@@ -113,6 +115,7 @@ let toastTimer,
   modalBusy = false,
   returnFocus;
 const admin = () => state.team?.role === "admin";
+const platformAdmin = () => state.user?.systemRole === "super_admin";
 const writable = () => state.team?.status === "active";
 const taskWritable = () => writable() && state.project?.status === "active";
 const dateAfter = (days) => {
@@ -352,17 +355,18 @@ function shell() {
   drag = null;
   const nav = Object.entries(labels)
     .filter(
-      ([key]) =>
-        key !== "onboarding" && (!state.team || key !== "invitations" || true),
+      ([key]) => key !== "onboarding" && (key !== "admin" || platformAdmin()),
     )
     .map(
       ([key, label]) =>
-        `<button class="nav-item ${state.page === key ? "active" : ""}" data-page="${key}">${icon({ onboarding: "users-round", workspace: "layout-dashboard", projects: "folder-kanban", tasks: "check-check", team: "users-round", invitations: "user-plus", trash: "trash-2", activity: "list", settings: "settings-2" }[key])}${label}</button>`,
+        `<button class="nav-item ${state.page === key ? "active" : ""}" data-page="${key}">${icon({ onboarding: "users-round", workspace: "layout-dashboard", projects: "folder-kanban", tasks: "check-check", team: "users-round", invitations: "user-plus", trash: "trash-2", activity: "list", settings: "settings-2", admin: "shield-check" }[key])}${label}</button>`,
     )
     .join("");
   root.innerHTML = `<div class="app"><aside class="sidebar"><div class="brand"><div class="brand-mark">W</div><span>welo</span></div><label class="field"><span>当前团队</span><select id="teamSelect" aria-label="当前团队">${options(teamOptions(), state.team?.id, state.teams.length ? null : "尚未加入团队")}</select></label><nav class="nav">${nav}</nav><div class="sidebar-bottom">${button("logout", "退出登录", "log-out")}<div class="user-mini"><div class="avatar green">${esc(state.user.username.slice(0, 1))}</div><div class="identity"><div class="name">${esc(state.user.username)}</div><small>${state.team ? (admin() ? "团队管理员" : "团队成员") : "尚未加入团队"}</small></div></div></div></aside><main class="main"><header class="topbar"><div class="crumbs"><strong>Welo</strong><span>${esc(state.team?.name ?? "未加入团队")}</span>${icon("chevron-right")}<strong id="pageTitle">${labels[state.page]}</strong></div><div class="top-actions">${tool("theme", "切换主题", "sun-moon")}${tool("refresh", "刷新当前页面", "refresh-cw")}<select id="mobileNav" aria-label="页面导航">${options(
     Object.entries(labels)
-      .filter(([key]) => key !== "onboarding")
+      .filter(
+        ([key]) => key !== "onboarding" && (key !== "admin" || platformAdmin()),
+      )
       .map(([id, name]) => ({ id, name })),
     state.page,
   )}</select>${tool("mobile-team", "切换团队", "users-round")}</div></header><section class="page-view" id="view" aria-live="polite"></section></main></div>${utilities()}`;
@@ -435,7 +439,7 @@ async function navigate(page) {
   state.page = labels[page] ? page : "workspace";
   if (
     !state.team &&
-    !["onboarding", "invitations", "settings"].includes(state.page)
+    !["onboarding", "invitations", "settings", "admin"].includes(state.page)
   )
     state.page = "onboarding";
   if (state.team && state.page === "onboarding") state.page = "workspace";
@@ -460,6 +464,7 @@ async function navigate(page) {
       trash: trashView,
       activity: activityView,
       settings: settingsView,
+      admin: adminView,
     }[state.page](gen);
   } catch (error) {
     if (gen === state.generation) showLoadError(error);
@@ -945,6 +950,43 @@ async function settingsView() {
     `<div class="page-heading"><h1>个人设置</h1></div><form id="profileForm" class="profile-form">${field("用户名", "username", state.user.username, "text", 'required minlength="2" maxlength="32"')}${field("邮箱", "email", state.user.email, "email", 'required maxlength="255"')}<button class="btn-primary" type="submit">${icon("save")}保存修改</button></form><div class="setting-row"><strong>外观</strong>${button("theme", "切换主题", "sun-moon")}</div>`;
 }
 async function adminView(gen) {
+  if (!platformAdmin()) return navigate("workspace");
+  const [overview, users, projects] = await Promise.all([
+    api.adminOverview(),
+    api.adminUsers({
+      page: state.adminPage,
+      pageSize: 20,
+      keyword: state.filters.adminKeyword,
+      systemRole: state.filters.adminRole,
+    }),
+    api.adminProjects({
+      page: state.adminPage,
+      pageSize: 20,
+      keyword: state.filters.adminKeyword,
+      status: state.filters.adminProjectStatus,
+    }),
+  ]);
+  if (gen !== state.generation) return;
+  const stats = {
+    userCount: "全部用户",
+    activeTeamCount: "活跃团队",
+    inProgressProjectCount: "进行中项目",
+    taskCount: "未删除任务",
+  };
+  $("#view").innerHTML =
+    `<div class="page-heading"><h1>平台后台</h1><p class="page-subtitle">超级管理员仅可只读查看平台用户与全部团队项目。</p></div><section class="overview">${Object.entries(
+      stats,
+    )
+      .map(
+        ([key, name]) =>
+          `<div class="stat"><div class="stat-top">${name}</div><div class="stat-number">${overview.data[key]}</div></div>`,
+      )
+      .join(
+        "",
+      )}</section><form id="adminSearch" class="toolbar"><input name="adminKeyword" aria-label="搜索用户或项目" placeholder="搜索用户、邮箱、团队或项目" value="${esc(state.filters.adminKeyword)}"><select name="adminRole" aria-label="用户角色">${enumOptions({ member: "普通用户", super_admin: "超级管理员" }, state.filters.adminRole, "全部用户角色")}</select><select name="adminProjectStatus" aria-label="项目状态">${enumOptions({ active: "进行中", archived: "已归档" }, state.filters.adminProjectStatus, "全部项目状态")}</select><button class="btn-secondary" type="submit">${icon("search")}搜索</button></form><section class="panel"><div class="panel-head"><h2>全部用户</h2></div>${table(["用户", "邮箱", "平台角色", "注册时间"], users.data.map((user) => `<tr><td>${esc(user.username)}</td><td>${esc(user.email)}</td><td>${user.systemRole === "super_admin" ? "超级管理员" : "普通用户"}</td><td>${esc(user.createdAt)}</td></tr>`).join(""))}${pager(users.meta, "admin")}</section><section class="panel" style="margin-top:18px"><div class="panel-head"><h2>全部项目</h2></div>${table(["项目", "团队", "状态", "未删除任务", "更新时间"], projects.data.map((project) => `<tr><td>${esc(project.name)}${project.deletedAt ? '<small class="description">已删除</small>' : ""}</td><td>${esc(project.team.name)}</td><td>${project.status === "active" ? "进行中" : "已归档"}</td><td>${project.taskCount}</td><td>${esc(project.updatedAt)}</td></tr>`).join(""))}${pager(projects.meta, "admin")}</section>`;
+}
+
+async function adminViewLegacy(gen) {
   return navigate("team");
   const [overview, users] = await Promise.all([
     api.adminOverview(),
@@ -1622,9 +1664,10 @@ root.addEventListener("submit", (event) => {
       state.taskPage = 1;
       await navigate("tasks");
     }
-    if (form.id === "userSearch") {
-      state.filters.userKeyword = data.keyword;
-      state.filters.userRole = data.systemRole;
+    if (form.id === "adminSearch") {
+      state.filters.adminKeyword = data.adminKeyword;
+      state.filters.adminRole = data.adminRole;
+      state.filters.adminProjectStatus = data.adminProjectStatus;
       state.adminPage = 1;
       await navigate("admin");
     }

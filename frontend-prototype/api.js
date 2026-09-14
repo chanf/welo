@@ -123,4 +123,7 @@ export const api = {
   restoreTrashTask: (t, k, x) =>
     send(`${team(t)}/trash/tasks/${id(k)}/restore`, "POST", x),
   activity: (t, x) => get(`${team(t)}/activity`, x),
+  adminOverview: () => get("/admin/overview"),
+  adminUsers: (x) => get("/admin/users", x),
+  adminProjects: (x) => get("/admin/projects", x),
 };
