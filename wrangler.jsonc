@@ -4,6 +4,9 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-09-07",
   "compatibility_flags": ["nodejs_compat"],
+  // Keep Dashboard-managed variables that are intentionally not represented
+  // in source control, including production-only configuration.
+  "keep_vars": true,
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1

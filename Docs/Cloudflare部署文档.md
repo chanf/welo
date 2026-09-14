@@ -292,7 +292,16 @@ npx wrangler secret put TELEGRAM_FEEDBACK_CHAT_ID
 | Build command | `npm ci && npm run build` |
 | Deploy command | `npm run deploy:production` |
 
-`npm run deploy:production` 会执行 `wrangler deploy`，使用顶层生产配置。仓库还定义了 `development` 环境用于本地；Wrangler 在同时存在环境配置时可能提示未显式指定环境，这是提示而非部署失败。不要在生产发布命令中追加 `--env development`。
+`npm run deploy:production` 会执行 `wrangler deploy --keep-vars`，使用顶层生产配置。`--keep-vars` 和 `wrangler.jsonc` 中的 `keep_vars: true` 会保留 Dashboard 中维护、但未在 `wrangler.jsonc` 声明的普通变量，避免代码发布意外删除生产配置。仓库还定义了 `development` 环境用于本地；Wrangler 在同时存在环境配置时可能提示未显式指定环境，这是提示而非部署失败。不要在生产发布命令中追加 `--env development`。
+
+`.dev.vars` 只由本地 `wrangler dev` 读取，永远不会上传到 Cloudflare。Telegram 凭据必须使用 Worker Secret 保存，而不是 Dashboard 普通变量：
+
+```bash
+npx wrangler secret put TELEGRAM_BOT_TOKEN
+npx wrangler secret put TELEGRAM_FEEDBACK_CHAT_ID
+```
+
+先完成上述两条 Secret 配置，再执行生产部署。`--keep-vars` 用于保护 Dashboard 管理的普通变量和绑定，不能把本地 `.dev.vars` 同步为生产 Secret。
 
 ### 4.4 手动部署
 
