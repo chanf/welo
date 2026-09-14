@@ -251,6 +251,22 @@ app.patch("/api/v1/users/me", async (c) => {
   return ok(c, updated ? accountDto(updated) : auth.user);
 });
 
+app.post("/api/v1/users/me/password", async (c) => {
+  const auth = currentAuth(c);
+  const body = await jsonBody(c, z.object({
+    currentPassword: z.string().min(1),
+    newPassword: z.string().min(8),
+    newPasswordConfirmation: z.string().min(1),
+  }));
+  if (body.newPassword !== body.newPasswordConfirmation) throw new ApiError(400, "VALIDATION_ERROR", "请求参数校验失败", [{ field: "newPasswordConfirmation", reason: "两次密码不一致" }]);
+  if (body.currentPassword === body.newPassword) throw new ApiError(400, "VALIDATION_ERROR", "新密码不能与当前密码相同");
+  const row = await c.env.DB.prepare("SELECT password_hash FROM users WHERE id = ?").bind(auth.user.id).first<{ password_hash: string }>();
+  if (!row) throw notFound();
+  if (!(await verifyPassword(body.currentPassword, row.password_hash))) throw new ApiError(400, "INVALID_CREDENTIALS", "当前密码错误");
+  await c.env.DB.prepare("UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(await hashPassword(body.newPassword), auth.user.id).run();
+  return ok(c, { message: "密码已修改" });
+});
+
 const fallbackCreator = (id: number) => ({ id: String(id), username: "", color: "#2563EB" });
 const teamListDto = async (c: AppContext, row: TeamRow) => {
   const creator = await c.env.DB.prepare("SELECT id, username, color FROM users WHERE id = ?").bind(row.created_by).first<PublicUserRow>();

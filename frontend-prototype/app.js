@@ -86,25 +86,25 @@ const icon = (name) => `<i data-lucide="${name}" aria-hidden="true"></i>`;
 const brandMark = `<svg viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="116" fill="#D9EFE5"/><path d="M132 190 L172 324 L216 224 L260 324 L304 190" fill="none" stroke="#167C68" stroke-width="52" stroke-linecap="round" stroke-linejoin="round"/><circle cx="372" cy="324" r="30" fill="#EA705B"/></svg>`;
 const bootMark = `<div class="boot"><svg class="boot-icon" viewBox="0 0 512 512" role="img" aria-label="Welo"><rect class="boot-tile" width="512" height="512" rx="116"/><circle class="boot-ripple" cx="372" cy="324" r="34"/><path class="boot-w" d="M132 190 L172 324 L216 224 L260 324 L304 190" pathLength="1"/><circle class="boot-dot" cx="372" cy="324" r="30"/></svg><span class="boot-word">welo</span></div>`;
 const labels = {
-  onboarding: "团队引导",
-  workspace: "工作台",
+  onboarding: t("page.createTeamPrompt"),
+  workspace: t("nav.admin"),
   projects: t("nav.projects"),
   tasks: t("task.table.task"),
-  team: "团队与成员",
+  team: t("team.title"),
   invitations: t("page.myInvitations"),
   trash: t("trash.title"),
   activity: t("activity.title"),
   settings: t("settings.title"),
   admin: t("admin.title"),
 };
-const statuses = { todo: "待办", in_progress: t("project.active"), done: "已完成" };
-const priorities = { low: "低", medium: "中", high: "高", urgent: "紧急" };
+const statuses = { todo: t("task.status.todo"), in_progress: t("project.active"), done: t("task.markDone") };
+const priorities = { low: "低", medium: "中", high: "高", urgent: t("priority.urgent") };
 const invitationStatuses = {
-  pending: "待处理",
-  accepted: "已接受",
-  declined: "已拒绝",
-  revoked: "已撤销",
-  expired: "已过期",
+  pending: t("task.status"),
+  accepted: t("invitation.accept"),
+  declined: t("invitation.decline"),
+  revoked: t("team.revokeInvitation"),
+  expired: t("invitation.expired"),
 };
 const state = {
   authStatus: "checking",
@@ -165,9 +165,9 @@ const normalizeTaskDateTime = (value) => {
     : null;
 };
 const formatTaskDateTime = (value) =>
-  value ? `${value.slice(0, 10)} ${value.slice(11, 16)}` : "未设置";
+  value ? `${value.slice(0, 10)} ${value.slice(11, 16)}` : t("task.noStartDate");
 const formatInvitationDateTime = (value) => {
-  if (!value) return "未记录";
+  if (!value) return t("task.noDetail");
   const date = new Date(value);
   return Number.isNaN(date.getTime())
     ? value
@@ -435,7 +435,7 @@ function shell() {
         `<button class="nav-item ${state.page === key ? "active" : ""}" data-page="${key}">${icon({ onboarding: "users-round", workspace: "layout-dashboard", projects: "folder-kanban", tasks: "check-check", team: "users-round", invitations: "user-plus", trash: "trash-2", activity: "list", settings: "settings-2", admin: "shield-check" }[key])}${label}</button>`,
     )
     .join("");
-  root.innerHTML = `<div class="app"><aside class="sidebar"><div class="brand"><div class="brand-mark">${brandMark}</div><span>welo</span></div><label class="field"><span>当前团队</span><select id="teamSelect" aria-label="当前团队">${options(teamOptions(), state.team?.id, state.teams.length ? null : "尚未加入团队")}</select></label><nav class="nav">${nav}</nav><div class="sidebar-bottom">${button("logout", "退出登录", "log-out")}<div class="user-mini"><div class="avatar green">${esc(state.user.username.slice(0, 1))}</div><div class="identity"><div class="name">${esc(state.user.username)}</div><small>${state.team ? (admin() ? "团队管理员" : t("team.inviteMembers")) : "尚未加入团队"}</small></div></div></div></aside><main class="main"><header class="topbar"><div class="crumbs"><strong>Welo</strong><span>${esc(state.team?.name ?? "未加入团队")}</span>${icon("chevron-right")}<strong id="pageTitle">${labels[state.page]}</strong></div><div class="top-actions">${tool("theme", t("settings.switchTheme"), "sun-moon")}${tool("refresh", "刷新当前页面", "refresh-cw")}<select id="mobileNav" aria-label="页面导航">${options(
+  root.innerHTML = `<div class="app"><aside class="sidebar"><div class="brand"><div class="brand-mark">${brandMark}</div><span>welo</span></div><label class="field"><span>当前团队</span><select id="teamSelect" aria-label=t("team.currentTeam")>${options(teamOptions(), state.team?.id, state.teams.length ? null : t("team.noMembers"))}</select></label><nav class="nav">${nav}</nav><div class="sidebar-bottom">${button("logout", t("common.logOut"), "log-out")}<div class="user-mini"><div class="avatar green">${esc(state.user.username.slice(0, 1))}</div><div class="identity"><div class="name">${esc(state.user.username)}</div><small>${state.team ? (admin() ? t("team.role.admin") : t("team.inviteMembers")) : t("team.noMembers")}</small></div></div></div></aside><main class="main"><header class="topbar"><div class="crumbs"><strong>Welo</strong><span>${esc(state.team?.name ?? t("team.noMembers"))}</span>${icon("chevron-right")}<strong id="pageTitle">${labels[state.page]}</strong></div><div class="top-actions">${tool("theme", t("settings.switchTheme"), "sun-moon")}${tool("refresh", t("common.refresh"), "refresh-cw")}<select id="mobileNav" aria-label=t("nav.title")>${options(
     Object.entries(labels)
       .filter(
         ([key]) => key !== "onboarding" && (key !== "admin" || platformAdmin()),
@@ -618,7 +618,7 @@ async function workspace(gen) {
   state.gantt = gantt?.data;
   state.tasks = gantt?.data.tasks ?? [];
   const stats = {
-    inProgressProjectCount: "进行中的项目",
+    inProgressProjectCount: t("admin.inProgressProjectCount"),
     myOpenTaskCount: t("page.myOpenTasks"),
     visibleTaskCount: t("page.visibleTasks"),
     overdueTaskCount: t("page.overdueTasks"),
@@ -719,7 +719,7 @@ function ganttBar(
   width = Math.min(width, timelineWidth - left);
   if (width <= 0) return "";
   const barColor = ganttColor(color);
-  return `<div class="bar ${ganttBarClass(task)} colored${conflicted ? " conflict" : ""}" data-task-id="${esc(task.id)}" style="--bar-color:${barColor};left:${left}px;width:${width}px;top:${top}px" title="${esc(task.title)}: ${esc(task.startDate ? formatTaskDateTime(task.startDate) : "未设置开始时间")} ~ ${esc(formatTaskDateTime(task.endDate))}">${task.isVirtualStart ? "" : '<span class="handle left"></span>'}<span class="bar-label">${esc(task.title)}</span><span class="handle right"></span></div>`;
+  return `<div class="bar ${ganttBarClass(task)} colored${conflicted ? " conflict" : ""}" data-task-id="${esc(task.id)}" style="--bar-color:${barColor};left:${left}px;width:${width}px;top:${top}px" title="${esc(task.title)}: ${esc(task.startDate ? formatTaskDateTime(task.startDate) : t("task.noStartDate"))} ~ ${esc(formatTaskDateTime(task.endDate))}">${task.isVirtualStart ? "" : '<span class="handle left"></span>'}<span class="bar-label">${esc(task.title)}</span><span class="handle right"></span></div>`;
 }
 
 function assigneeGanttRows() {
@@ -1065,11 +1065,11 @@ async function tasksView(gen) {
   if (gen !== state.generation) return;
   state.tasks = result.data;
   $("#view").innerHTML =
-    `<div class="page-heading"><h1>任务</h1><div class="head-actions">${projectSelector()}${button("task-create", t("task.create"), "plus", taskWritable() ? "" : "disabled")}</div></div><form id="taskSearch" class="toolbar"><input name="keyword" aria-label="搜索任务" placeholder="搜索任务" value="${esc(f.keyword)}"><select name="status" aria-label=t("task.status")>${enumOptions(statuses, f.status, t("task.allStatuses"))}</select><select name="priority" aria-label=t("task.sortPriority")>${enumOptions(priorities, f.priority, t("task.allPriorities"))}</select><select name="sortBy" aria-label=t("task.sortBy")>${enumOptions({ endDate: t("task.sortEndDate"), createdAt: t("task.sortCreatedAt"), priority: t("task.sortPriority") }, f.sortBy || "endDate")}</select><select name="sortOrder" aria-label=t("task.sortOrder")>${enumOptions({ asc: t("task.sortAsc"), desc: t("task.sortDesc") }, f.sortOrder || "asc")}</select><button type="button" class="mine-filter ${f.mine ? "active" : ""}" data-action="task-mine" aria-pressed="${f.mine ? "true" : "false"}">${icon(f.mine ? "check" : "user-round")}只看我的</button><button class="btn-secondary" type="submit">${icon("search")}搜索</button></form>${f.mine ? `<p class="filter-hint" role="status">当前显示我的任务 · 共 ${result.meta.pagination?.total ?? result.data.length} 项</p>` : ""}${table([t("task.table.task"), t("task.table.assignee"), t("task.table.due"), t("task.table.status"), t("task.sortPriority")], taskRows(result.data))}${pager(result.meta, "task")}`;
+    `<div class="page-heading"><h1>任务</h1><div class="head-actions">${projectSelector()}${button("task-create", t("task.create"), "plus", taskWritable() ? "" : "disabled")}</div></div><form id="taskSearch" class="toolbar"><input name="keyword" aria-label=t("task.search") placeholder=t("task.search") value="${esc(f.keyword)}"><select name="status" aria-label=t("task.status")>${enumOptions(statuses, f.status, t("task.allStatuses"))}</select><select name="priority" aria-label=t("task.sortPriority")>${enumOptions(priorities, f.priority, t("task.allPriorities"))}</select><select name="sortBy" aria-label=t("task.sortBy")>${enumOptions({ endDate: t("task.sortEndDate"), createdAt: t("task.sortCreatedAt"), priority: t("task.sortPriority") }, f.sortBy || "endDate")}</select><select name="sortOrder" aria-label=t("task.sortOrder")>${enumOptions({ asc: t("task.sortAsc"), desc: t("task.sortDesc") }, f.sortOrder || "asc")}</select><button type="button" class="mine-filter ${f.mine ? "active" : ""}" data-action="task-mine" aria-pressed="${f.mine ? "true" : "false"}">${icon(f.mine ? "check" : "user-round")}只看我的</button><button class="btn-secondary" type="submit">${icon("search")}搜索</button></form>${f.mine ? `<p class="filter-hint" role="status">当前显示我的任务 · 共 ${result.meta.pagination?.total ?? result.data.length} 项</p>` : ""}${table([t("task.table.task"), t("task.table.assignee"), t("task.table.due"), t("task.table.status"), t("task.sortPriority")], taskRows(result.data))}${pager(result.meta, "task")}`;
 }
 async function settingsView() {
   $("#view").innerHTML =
-    `<div class="page-heading"><h1>个人设置</h1></div><form id="profileForm" class="profile-form">${field(t("auth.username"), "username", state.user.username, "text", 'required minlength="2" maxlength="32"')}${field(t("admin.email"), "email", state.user.email, "email", 'required maxlength="255"')}<button class="btn-primary" type="submit">${icon("save")}保存修改</button></form><div class="setting-row"><strong>外观</strong>${button("theme", t("settings.switchTheme"), "sun-moon")}</div>`;
+    `<div class="page-heading"><h1>${t("settings.title")}</h1></div><form id="profileForm" class="profile-form">${field(t("auth.username"), "username", state.user.username, "text", 'required minlength="2" maxlength="32"')}${field(t("admin.email"), "email", state.user.email, "email", 'required maxlength="255"')}<button class="btn-primary" type="submit">${icon("save")}${t("settings.saveChanges")}</button></form><div class="setting-row"><strong>${t("settings.appearance")}</strong>${button("theme", t("settings.switchTheme"), "sun-moon")}</div><div class="setting-row" style="margin-top:24px"><h2 style="margin-bottom:12px">${t("settings.changePassword")}</h2><form id="passwordForm" class="profile-form">${field(t("settings.currentPassword"), "currentPassword", "", "password", 'required minlength="1"')}${field(t("settings.newPassword"), "newPassword", "", "password", 'required minlength="8"')}${field(t("settings.confirmNewPassword"), "newPasswordConfirmation", "", "password", 'required minlength="8"')}<button class="btn-primary" type="submit">${icon("key-round")}${t("settings.updatePassword")}</button></form></div>`;
 }
 async function adminView(gen) {
   if (!platformAdmin()) return navigate("workspace");
@@ -1105,7 +1105,7 @@ async function adminView(gen) {
       )
       .join(
         "",
-      )}</section><form id="adminSearch" class="toolbar"><input name="adminKeyword" aria-label=t("admin.searchPlaceholder") placeholder=t("admin.searchPlaceholder") value="${esc(state.filters.adminKeyword)}"><select name="adminRole" aria-label=t("admin.platformRole")>${enumOptions({ member: t("admin.roleMember"), super_admin: t("admin.roleSuperAdmin") }, state.filters.adminRole, t("admin.allUserRoles"))}</select><select name="adminProjectStatus" aria-label=t("project.status")>${enumOptions({ active: t("project.active"), archived: t("project.archived") }, state.filters.adminProjectStatus, t("admin.allProjectStatuses"))}</select><button class="btn-secondary" type="submit">${icon("search")}搜索</button></form><section class="panel"><div class="panel-head"><h2>全部用户</h2></div>${table([t("admin.user"), t("admin.email"), "平台角色", t("admin.createdAt")], users.data.map((user) => `<tr><td>${esc(user.username)}</td><td>${esc(user.email)}</td><td>${user.systemRole === "super_admin" ? t("admin.roleSuperAdmin") : t("admin.roleMember")}</td><td>${esc(user.createdAt)}</td></tr>`).join(""))}${pager(users.meta, "admin")}</section><section class="panel" style="margin-top:18px"><div class="panel-head"><h2>全部项目</h2></div>${table([t("nav.projects"), t("admin.team"), t("task.table.status"), t("admin.noDeletedTasks"), t("admin.updatedAt")], projects.data.map((project) => `<tr><td>${esc(project.name)}${project.deletedAt ? '<small class="description">已删除</small>' : ""}</td><td>${esc(project.team.name)}</td><td>${project.status === "active" ? t("project.active") : t("project.archived")}</td><td>${project.taskCount}</td><td>${esc(project.updatedAt)}</td></tr>`).join(""))}${pager(projects.meta, "admin")}</section>`;
+      )}</section><form id="adminSearch" class="toolbar"><input name="adminKeyword" aria-label=t("admin.searchPlaceholder") placeholder=t("admin.searchPlaceholder") value="${esc(state.filters.adminKeyword)}"><select name="adminRole" aria-label=t("admin.platformRole")>${enumOptions({ member: t("admin.roleMember"), super_admin: t("admin.roleSuperAdmin") }, state.filters.adminRole, t("admin.allUserRoles"))}</select><select name="adminProjectStatus" aria-label=t("project.status")>${enumOptions({ active: t("project.active"), archived: t("project.archived") }, state.filters.adminProjectStatus, t("admin.allProjectStatuses"))}</select><button class="btn-secondary" type="submit">${icon("search")}搜索</button></form><section class="panel"><div class="panel-head"><h2>全部用户</h2></div>${table([t("admin.user"), t("admin.email"), t("admin.platformRole"), t("admin.createdAt")], users.data.map((user) => `<tr><td>${esc(user.username)}</td><td>${esc(user.email)}</td><td>${user.systemRole === "super_admin" ? t("admin.roleSuperAdmin") : t("admin.roleMember")}</td><td>${esc(user.createdAt)}</td></tr>`).join(""))}${pager(users.meta, "admin")}</section><section class="panel" style="margin-top:18px"><div class="panel-head"><h2>全部项目</h2></div>${table([t("nav.projects"), t("admin.team"), t("task.table.status"), t("admin.noDeletedTasks"), t("admin.updatedAt")], projects.data.map((project) => `<tr><td>${esc(project.name)}${project.deletedAt ? '<small class="description">已删除</small>' : ""}</td><td>${esc(project.team.name)}</td><td>${project.status === "active" ? t("project.active") : t("project.archived")}</td><td>${project.taskCount}</td><td>${esc(project.updatedAt)}</td></tr>`).join(""))}${pager(projects.meta, "admin")}</section>`;
 }
 
 async function adminViewLegacy(gen) {
@@ -1374,7 +1374,7 @@ async function invitationsView() {
 async function organizationEditorLegacy(kind, id) {
   const current = kind === "team" && id ? state.team : null;
   openDialog(
-    `${current ? t("common.edit") : "创建"}团队`,
+    `${current ? t("common.edit") : t("common.create")}团队`,
     field(
       t("team.teamName"),
       "name",
@@ -1537,7 +1537,7 @@ async function organizationEditor(kind, id) {
       ? { active: t("team.active"), archived: t("project.archived") }
       : { active: t("team.active"), disabled: t("team.disabled") };
   openDialog(
-    `${current ? t("common.edit") : "创建"}${kind === "team" ? t("admin.team") : t("task.table.group")}`,
+    `${current ? t("common.edit") : t("common.create")}${kind === "team" ? t("admin.team") : t("task.table.group")}`,
     field(
       t("team.teamName"),
       "name",
@@ -1620,7 +1620,7 @@ async function memberAdder(groupId) {
         await api.addGroupMember(state.team.id, groupId, data.userId);
         closeDialog(true);
         await refreshData();
-        toast("成员已添加");
+        toast(t("toast.memberAdded"));
       },
     );
   } else {
@@ -1646,7 +1646,7 @@ async function memberAdder(groupId) {
         await api.addMember(state.team.id, data.userId);
         closeDialog(true);
         await refreshData();
-        toast("成员已添加");
+        toast(t("toast.memberAdded"));
       },
     );
     setupMemberPicker(existingUsers);
@@ -1832,6 +1832,11 @@ root.addEventListener("submit", (event) => {
       await navigate("settings");
       toast(t("settings.settingsSaved"));
     }
+    if (form.id === "passwordForm") {
+      await api.changePassword(data);
+      form.reset();
+      toast(t("settings.passwordChanged"));
+    }
     if (form.id === "projectSearch") {
       state.filters.projectKeyword = data.keyword;
       state.filters.projectStatus = data.status;
@@ -1989,7 +1994,7 @@ root.addEventListener("click", (event) => {
         await api.restoreTrashTask(state.team.id, id, input);
       else await api.restoreTrashProject(state.team.id, id, input);
       await refreshData();
-      toast("已恢复");
+      toast(t("toast.restored"));
     }
     if (action === "toggle-view") {
       $("#ganttPanel").hidden = !$("#ganttPanel").hidden;
@@ -2334,7 +2339,7 @@ root.addEventListener("pointerup", () => {
         current.bar.title = `${result.data.title}: ${
           result.data.startDate
             ? formatTaskDateTime(result.data.startDate)
-            : "未设置开始时间"
+            : t("task.noStartDate")
         } ~ ${result.data.endDate}`;
         const scheduleTable = $("#scheduleTable");
         if (scheduleTable)

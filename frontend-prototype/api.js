@@ -82,6 +82,7 @@ export const api = {
   logout: () => send("/auth/logout", "POST"),
   sendFeedback: (x) => send("/public/feedback", "POST", x),
   profile: (x) => send("/users/me", "PATCH", x),
+  changePassword: (x) => send("/users/me/password", "POST", x),
   teams: () => get("/teams"),
   createTeam: (x) =>
     send("/teams", "POST", x, {
