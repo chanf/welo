@@ -1392,7 +1392,7 @@ async function inviteMember() {
     },
   );
 }
-async function trashView() {
+async function trashView(gen) {
   const result = await api.trash(state.team.id, {
     page: state.trashPage,
     pageSize: 20,
