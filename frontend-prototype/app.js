@@ -82,6 +82,8 @@ const esc = (value) =>
       ],
   );
 const icon = (name) => `<i data-lucide="${name}" aria-hidden="true"></i>`;
+const brandMark = `<svg viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="116" fill="#D9EFE5"/><path d="M132 190 L172 324 L216 224 L260 324 L304 190" fill="none" stroke="#167C68" stroke-width="52" stroke-linecap="round" stroke-linejoin="round"/><circle cx="372" cy="324" r="30" fill="#EA705B"/></svg>`;
+const bootMark = `<div class="boot"><svg class="boot-icon" viewBox="0 0 512 512" role="img" aria-label="Welo"><rect class="boot-tile" width="512" height="512" rx="116"/><circle class="boot-ripple" cx="372" cy="324" r="34"/><path class="boot-w" d="M132 190 L172 324 L216 224 L260 324 L304 190" pathLength="1"/><circle class="boot-dot" cx="372" cy="324" r="30"/></svg><span class="boot-word">welo</span></div>`;
 const labels = {
   onboarding: "团队引导",
   workspace: "工作台",
@@ -367,18 +369,18 @@ function utilities() {
 }
 
 function renderSessionLoading(message = "正在恢复会话...") {
-  root.innerHTML = `<section class="session-screen"><div class="brand"><div class="brand-mark">W</div><span>welo</span></div><div class="session-loading"><span class="session-spinner" aria-hidden="true"></span><p role="status">${esc(message)}</p></div></section>`;
+  root.innerHTML = `<section class="session-screen">${bootMark}<div class="session-loading"><span class="session-spinner" aria-hidden="true"></span><p role="status">${esc(message)}</p></div></section>`;
 }
 
 function renderSessionError(message) {
   state.authStatus = "error";
-  root.innerHTML = `<section class="session-screen"><div class="brand"><div class="brand-mark">W</div><span>welo</span></div><p class="session-error" role="alert">${esc(message)}</p>${button("session-retry", "重试", "refresh-cw")}</section>`;
+  root.innerHTML = `<section class="session-screen">${bootMark}<p class="session-error" role="alert">${esc(message)}</p>${button("session-retry", "重试", "refresh-cw")}</section>`;
   hydrate();
 }
 
 function renderAuth(mode = "login", message = "") {
   state.authStatus = "unauthenticated";
-  root.innerHTML = `<section class="auth-screen show"><div class="auth-layout"><aside class="auth-aside"><div class="brand"><div class="brand-mark">W</div><span>welo</span></div><div class="auth-quote"><h1>Welo</h1><p>让团队的每一步，都清晰发生。</p></div></aside><div class="auth-form"><div class="auth-tabs"><button data-action="login-mode" class="${mode === "login" ? "active" : ""}">登录</button><button data-action="register-mode" class="${mode === "register" ? "active" : ""}">注册</button></div><h2>${mode === "login" ? "欢迎回来" : "创建账号"}</h2><p role="status">${esc(message)}</p><form id="authForm" data-mode="${mode}" class="auth-fields">${mode === "login" ? field("用户名或邮箱", "account", "", "text", 'required autocomplete="username" maxlength="255"') : field("用户名", "username", "", "text", 'required minlength="2" maxlength="32" autocomplete="username"') + field("邮箱", "email", "", "email", 'required autocomplete="email" maxlength="255"')}${field("密码", "password", "", "password", `required ${mode === "register" ? 'minlength="8" autocomplete="new-password"' : 'autocomplete="current-password"'}`)}${mode === "register" ? field("确认密码", "passwordConfirmation", "", "password", 'required minlength="8" autocomplete="new-password"') : ""}<button class="btn-primary" type="submit">${icon("log-in")}${mode === "login" ? "登录" : "注册"}</button></form><div class="auth-support">${button("feedback-open", "用户留言", "message-square")}</div>${tool("theme", "切换主题", "sun-moon")}</div></div></section>${utilities()}`;
+  root.innerHTML = `<section class="auth-screen show"><div class="auth-layout"><aside class="auth-aside"><div class="brand"><div class="brand-mark">${brandMark}</div><span>welo</span></div><div class="auth-quote"><h1>Welo</h1><p>让团队的每一步，都清晰发生。</p></div></aside><div class="auth-form"><div class="auth-tabs"><button data-action="login-mode" class="${mode === "login" ? "active" : ""}">登录</button><button data-action="register-mode" class="${mode === "register" ? "active" : ""}">注册</button></div><h2>${mode === "login" ? "欢迎回来" : "创建账号"}</h2><p role="status">${esc(message)}</p><form id="authForm" data-mode="${mode}" class="auth-fields">${mode === "login" ? field("用户名或邮箱", "account", "", "text", 'required autocomplete="username" maxlength="255"') : field("用户名", "username", "", "text", 'required minlength="2" maxlength="32" autocomplete="username"') + field("邮箱", "email", "", "email", 'required autocomplete="email" maxlength="255"')}${field("密码", "password", "", "password", `required ${mode === "register" ? 'minlength="8" autocomplete="new-password"' : 'autocomplete="current-password"'}`)}${mode === "register" ? field("确认密码", "passwordConfirmation", "", "password", 'required minlength="8" autocomplete="new-password"') : ""}<button class="btn-primary" type="submit">${icon("log-in")}${mode === "login" ? "登录" : "注册"}</button></form><div class="auth-support">${button("feedback-open", "用户留言", "message-square")}</div>${tool("theme", "切换主题", "sun-moon")}</div></div></section>${utilities()}`;
   hydrate();
 }
 
@@ -430,7 +432,7 @@ function shell() {
         `<button class="nav-item ${state.page === key ? "active" : ""}" data-page="${key}">${icon({ onboarding: "users-round", workspace: "layout-dashboard", projects: "folder-kanban", tasks: "check-check", team: "users-round", invitations: "user-plus", trash: "trash-2", activity: "list", settings: "settings-2", admin: "shield-check" }[key])}${label}</button>`,
     )
     .join("");
-  root.innerHTML = `<div class="app"><aside class="sidebar"><div class="brand"><div class="brand-mark">W</div><span>welo</span></div><label class="field"><span>当前团队</span><select id="teamSelect" aria-label="当前团队">${options(teamOptions(), state.team?.id, state.teams.length ? null : "尚未加入团队")}</select></label><nav class="nav">${nav}</nav><div class="sidebar-bottom">${button("logout", "退出登录", "log-out")}<div class="user-mini"><div class="avatar green">${esc(state.user.username.slice(0, 1))}</div><div class="identity"><div class="name">${esc(state.user.username)}</div><small>${state.team ? (admin() ? "团队管理员" : "团队成员") : "尚未加入团队"}</small></div></div></div></aside><main class="main"><header class="topbar"><div class="crumbs"><strong>Welo</strong><span>${esc(state.team?.name ?? "未加入团队")}</span>${icon("chevron-right")}<strong id="pageTitle">${labels[state.page]}</strong></div><div class="top-actions">${tool("theme", "切换主题", "sun-moon")}${tool("refresh", "刷新当前页面", "refresh-cw")}<select id="mobileNav" aria-label="页面导航">${options(
+  root.innerHTML = `<div class="app"><aside class="sidebar"><div class="brand"><div class="brand-mark">${brandMark}</div><span>welo</span></div><label class="field"><span>当前团队</span><select id="teamSelect" aria-label="当前团队">${options(teamOptions(), state.team?.id, state.teams.length ? null : "尚未加入团队")}</select></label><nav class="nav">${nav}</nav><div class="sidebar-bottom">${button("logout", "退出登录", "log-out")}<div class="user-mini"><div class="avatar green">${esc(state.user.username.slice(0, 1))}</div><div class="identity"><div class="name">${esc(state.user.username)}</div><small>${state.team ? (admin() ? "团队管理员" : "团队成员") : "尚未加入团队"}</small></div></div></div></aside><main class="main"><header class="topbar"><div class="crumbs"><strong>Welo</strong><span>${esc(state.team?.name ?? "未加入团队")}</span>${icon("chevron-right")}<strong id="pageTitle">${labels[state.page]}</strong></div><div class="top-actions">${tool("theme", "切换主题", "sun-moon")}${tool("refresh", "刷新当前页面", "refresh-cw")}<select id="mobileNav" aria-label="页面导航">${options(
     Object.entries(labels)
       .filter(
         ([key]) => key !== "onboarding" && (key !== "admin" || platformAdmin()),
