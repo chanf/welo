@@ -51,6 +51,31 @@ svg {
 .identity {
   overflow-wrap: anywhere;
 }
+.invitation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
+}
+.invitation-status {
+  display: grid;
+  justify-items: end;
+  gap: 3px;
+  text-align: right;
+}
+.invitation-status small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.status.accepted {
+  color: var(--teal);
+}
+.status.declined,
+.status.revoked,
+.status.expired {
+  color: var(--muted);
+}
 .page-heading {
   display: flex;
   justify-content: space-between;

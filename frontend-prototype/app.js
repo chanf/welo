@@ -90,6 +90,13 @@ const labels = {
 };
 const statuses = { todo: "待办", in_progress: "进行中", done: "已完成" };
 const priorities = { low: "低", medium: "中", high: "高", urgent: "紧急" };
+const invitationStatuses = {
+  pending: "待处理",
+  accepted: "已接受",
+  declined: "已拒绝",
+  revoked: "已撤销",
+  expired: "已过期",
+};
 const state = {
   authStatus: "checking",
   user: null,
@@ -150,6 +157,17 @@ const normalizeTaskDateTime = (value) => {
 };
 const formatTaskDateTime = (value) =>
   value ? `${value.slice(0, 10)} ${value.slice(11, 16)}` : "未设置";
+const formatInvitationDateTime = (value) => {
+  if (!value) return "未记录";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? value
+    : new Intl.DateTimeFormat("zh-CN", {
+        dateStyle: "medium",
+        timeStyle: "short",
+        timeZone: "Asia/Shanghai",
+      }).format(date);
+};
 const nowTaskDateTime = () => {
   const date = new Date();
   return `${date.toLocaleDateString("en-CA")}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
@@ -1275,11 +1293,18 @@ async function taskEditor(id) {
 }
 
 async function onboardingView() {
-  const invitations = await api
-    .myInvitations({ status: "pending" })
-    .catch(() => ({ data: [] }));
+  const invitations = await api.myInvitations().catch(() => ({ data: [] }));
+  const invitationRows = (invitations.data ?? [])
+    .map((invitation) => {
+      const action =
+        invitation.status === "pending"
+          ? `${button("invitation-accept", "接受", "check", `data-id="${esc(invitation.id)}"`)}${button("invitation-decline", "拒绝", "x", `data-id="${esc(invitation.id)}"`)}`
+          : `<div class="invitation-status"><span class="status ${esc(invitation.status)}">${esc(invitationStatuses[invitation.status] ?? invitation.status)}</span><small>操作时间：${esc(formatInvitationDateTime(invitation.respondedAt))}</small></div>`;
+      return `<div class="member-row"><div class="identity"><strong>${esc(invitation.team.name)}</strong><small>${esc(invitation.inviter.username)} 邀请你加入</small></div><div class="invitation-actions">${action}</div></div>`;
+    })
+    .join("");
   $("#view").innerHTML =
-    `<div class="page-heading"><h1>开始使用 Welo</h1></div><p class="page-subtitle">创建一个团队，或处理其他团队发来的邀请。</p><section class="panel"><div class="panel-head"><h2>创建团队</h2></div><div class="panel-body">${button("team-create", "创建团队", "plus")}</div></section><section class="panel"><div class="panel-head"><h2>我的邀请</h2></div>${invitations.data?.length ? invitations.data.map((i) => `<div class="member-row"><div class="identity"><strong>${esc(i.team.name)}</strong><small>${esc(i.inviter.username)} 邀请你加入</small></div>${button("invitation-accept", "接受", "check", `data-id="${esc(i.id)}"`)}${button("invitation-decline", "拒绝", "x", `data-id="${esc(i.id)}"`)} </div>`).join("") : empty("暂无待处理邀请")}</section>`;
+    `<div class="page-heading"><h1>开始使用 Welo</h1></div><p class="page-subtitle">创建一个团队，或处理其他团队发来的邀请。</p><section class="panel"><div class="panel-head"><h2>创建团队</h2></div><div class="panel-body">${button("team-create", "创建团队", "plus")}</div></section><section class="panel"><div class="panel-head"><h2>我的邀请</h2></div>${invitationRows || empty("暂无邀请记录")}</section>`;
 }
 
 async function invitationsView() {
