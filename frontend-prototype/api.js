@@ -80,6 +80,7 @@ export const api = {
   login: (x) => send("/auth/login", "POST", x),
   register: (x) => send("/auth/register", "POST", x),
   logout: () => send("/auth/logout", "POST"),
+  sendFeedback: (x) => send("/public/feedback", "POST", x),
   profile: (x) => send("/users/me", "PATCH", x),
   teams: () => get("/teams"),
   createTeam: (x) =>

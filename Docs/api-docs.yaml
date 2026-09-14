@@ -10,6 +10,7 @@ servers:
   - url: /api/v1
 tags:
   - name: Auth
+  - name: Feedback
   - name: Users
   - name: Teams
   - name: Groups
@@ -64,6 +65,26 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/SuccessNull' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
+  /public/feedback:
+    post:
+      tags: [Feedback]
+      summary: 提交登录页用户留言
+      description: 公开接口。后端校验后将留言发送到 Telegram，不在数据库保存留言内容。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FeedbackRequest' }
+      responses:
+        '201':
+          description: 留言已发送
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FeedbackEnvelope' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/TelegramUnavailable' }
   /auth/me:
     get:
       tags: [Auth]
@@ -676,6 +697,16 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    RateLimited:
+      description: 请求过于频繁
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    TelegramUnavailable:
+      description: Telegram 配置缺失或发送失败
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
   schemas:
     Id:
       type: string
@@ -724,6 +755,13 @@ components:
       properties:
         account: { type: string, minLength: 1, maxLength: 255, example: linyi@example.com }
         password: { type: string, minLength: 1, format: password }
+    FeedbackRequest:
+      type: object
+      required: [nickname, contact, message]
+      properties:
+        nickname: { type: string, minLength: 1, maxLength: 64, example: 张三 }
+        contact: { type: string, minLength: 3, maxLength: 128, example: zhangsan@example.com }
+        message: { type: string, minLength: 1, maxLength: 1024, example: 希望增加…… }
     ProfileUpdateRequest:
       type: object
       minProperties: 1
@@ -939,6 +977,16 @@ components:
           properties:
             user: { $ref: '#/components/schemas/User' }
             onboardingRequired: { type: boolean }
+        meta: { $ref: '#/components/schemas/Meta' }
+    FeedbackEnvelope:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [status]
+          properties:
+            status: { type: string, enum: [sent] }
         meta: { $ref: '#/components/schemas/Meta' }
     MeEnvelope:
       type: object

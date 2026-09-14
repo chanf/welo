@@ -10,6 +10,7 @@ import { isoTimestamp, nextTaskVersion, nowIso, shanghaiToday } from "./shared/t
 import { allocateUserColor } from "./shared/user-color";
 import { projectAccess, requireTeamAdmin, teamAccess, type AccessContext, type ProjectRow, type TeamRow } from "./shared/access";
 import { auditStatement } from "./shared/audit";
+import { feedbackSchema, isFeedbackRateLimited, recordFeedbackAttempt, sendFeedbackToTelegram } from "./shared/feedback";
 
 type App = { Bindings: Env; Variables: { requestId: string; auth: ReturnType<typeof currentAuth> } };
 type AppContext = Context<App>;
@@ -188,6 +189,16 @@ app.post("/api/v1/auth/login", async (c) => {
   await c.env.DB.prepare("INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, datetime(CURRENT_TIMESTAMP, ?))").bind(await sha256(token), row.id, `+${Number(c.env.SESSION_TTL_DAYS || 14)} days`).run();
   c.header("Set-Cookie", cookieHeader(token, Number(c.env.SESSION_TTL_DAYS || 14) * 86400));
   return ok(c, { user: accountDto(row), onboardingRequired: false });
+});
+
+app.post("/api/v1/public/feedback", async (c) => {
+  const body = await jsonBody(c, feedbackSchema);
+  const ip = c.req.header("CF-Connecting-IP")?.trim() || "unknown";
+  const ipHash = await sha256(`welo-feedback:${ip}`);
+  if (await isFeedbackRateLimited(c.env.DB, ipHash)) throw new ApiError(429, "RATE_LIMITED", "留言提交过于频繁，请稍后再试");
+  await recordFeedbackAttempt(c.env.DB, ipHash);
+  await sendFeedbackToTelegram(c.env, body);
+  return ok(c, { status: "sent" }, 201);
 });
 
 app.use("/api/v1/*", authRequired);
@@ -1162,6 +1173,7 @@ export default {
     await env.DB.batch([
       env.DB.prepare("DELETE FROM sessions WHERE expires_at <= CURRENT_TIMESTAMP"),
       env.DB.prepare("UPDATE team_invitations SET status = 'expired', updated_at = CURRENT_TIMESTAMP WHERE status = 'pending' AND expires_at <= CURRENT_TIMESTAMP"),
+      env.DB.prepare("DELETE FROM feedback_rate_limits WHERE created_at < datetime(CURRENT_TIMESTAMP, '-1 hour')"),
     ]);
     console.log(JSON.stringify({ event: "scheduled_cleanup", scheduledTime: controller.scheduledTime }));
   },

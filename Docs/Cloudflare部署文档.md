@@ -76,6 +76,7 @@ migrations/0001_initial.sql
 migrations/0002_add_user_colors.sql
 migrations/0003_task_half_hour_times.sql
 migrations/0004_team_collaboration_v2.sql
+migrations/0005_public_feedback.sql
 database/init.sql
 frontend-prototype/.env.production
 frontend-prototype/api.js
@@ -265,6 +266,17 @@ binding 必须保持为 `DB`，后端通过 `env.DB` 访问 D1。`nodejs_compat`
 - 修改后必须重新部署 Worker。
 
 当前代码不需要 `SESSION_SECRET` 或 `PASSWORD_PEPPER`。不要添加代码不读取的变量。若未来引入 Secret，应使用 Cloudflare Secret 类型，而不是普通文本变量或提交到仓库。
+
+#### 用户留言 Telegram secrets
+
+登录页用户留言功能需要两个 Worker secret：
+
+```bash
+npx wrangler secret put TELEGRAM_BOT_TOKEN
+npx wrangler secret put TELEGRAM_FEEDBACK_CHAT_ID
+```
+
+`TELEGRAM_BOT_TOKEN` 来自 BotFather；`TELEGRAM_FEEDBACK_CHAT_ID` 是接收留言的个人聊天、群组或频道 chat id。两者不得写入 `wrangler.jsonc`、前端环境变量或 Git。缺少任意一个时，其他 API 不受影响，但 `POST /api/v1/public/feedback` 会返回 503。
 
 ### 4.3 自动构建配置
 

@@ -136,6 +136,12 @@ CREATE TABLE idempotency_keys (
   UNIQUE (user_id, operation, key)
 );
 
+CREATE TABLE feedback_rate_limits (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ip_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX idx_team_members_user_status ON team_members(user_id, status, team_id);
 CREATE INDEX idx_team_members_team_status ON team_members(team_id, status, user_id);
 CREATE UNIQUE INDEX idx_team_members_one_active ON team_members(team_id, user_id) WHERE status = 'active';
@@ -151,6 +157,7 @@ CREATE INDEX idx_invitations_team_status ON team_invitations(team_id, status, cr
 CREATE UNIQUE INDEX idx_invitations_one_pending ON team_invitations(team_id, invitee_user_id) WHERE status = 'pending';
 CREATE INDEX idx_audit_team_created ON audit_logs(team_id, created_at, id);
 CREATE INDEX idx_idempotency_expiry ON idempotency_keys(expires_at);
+CREATE INDEX idx_feedback_rate_limits_ip_created ON feedback_rate_limits(ip_hash, created_at);
 
 CREATE TRIGGER teams_creator_membership_insert
 AFTER INSERT ON teams

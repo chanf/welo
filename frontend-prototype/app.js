@@ -27,6 +27,8 @@ import {
   Minimize2,
   ZoomIn,
   ZoomOut,
+  MessageSquare,
+  Send,
 } from "lucide";
 
 const icons = {
@@ -57,6 +59,8 @@ const icons = {
   Minimize2,
   ZoomIn,
   ZoomOut,
+  MessageSquare,
+  Send,
 };
 import { api } from "./api.js";
 import "./production.css";
@@ -114,6 +118,7 @@ let toastTimer,
   modalSave,
   modalBusy = false,
   returnFocus;
+let feedbackDraft = { nickname: "", contact: "", message: "" };
 const admin = () => state.team?.role === "admin";
 const platformAdmin = () => state.user?.systemRole === "super_admin";
 const writable = () => state.team?.status === "active";
@@ -286,6 +291,8 @@ const tool = (action, name, symbol, extra = "") =>
   `<button type="button" class="icon-btn" data-action="${action}" aria-label="${esc(name)}" title="${esc(name)}" ${extra}>${icon(symbol)}</button>`;
 const field = (label, name, value = "", type = "text", attrs = "") =>
   `<label class="field"><span>${label}</span><input name="${name}" type="${type}" value="${esc(value)}" ${attrs}></label>`;
+const textareaField = (label, name, value = "", attrs = "") =>
+  `<label class="field"><span>${label}</span><textarea name="${name}" ${attrs}>${esc(value)}</textarea></label>`;
 const selectField = (label, name, content) =>
   `<label class="field"><span>${label}</span><select name="${name}" required>${content}</select></label>`;
 const empty = (text) => `<div class="empty">${esc(text)}</div>`;
@@ -347,8 +354,45 @@ function renderSessionError(message) {
 
 function renderAuth(mode = "login", message = "") {
   state.authStatus = "unauthenticated";
-  root.innerHTML = `<section class="auth-screen show"><div class="auth-layout"><aside class="auth-aside"><div class="brand"><div class="brand-mark">W</div><span>welo</span></div><div class="auth-quote"><h1>Welo</h1><p>让团队的每一步，都清晰发生。</p></div></aside><div class="auth-form"><div class="auth-tabs"><button data-action="login-mode" class="${mode === "login" ? "active" : ""}">登录</button><button data-action="register-mode" class="${mode === "register" ? "active" : ""}">注册</button></div><h2>${mode === "login" ? "欢迎回来" : "创建账号"}</h2><p role="status">${esc(message)}</p><form id="authForm" data-mode="${mode}" class="auth-fields">${mode === "login" ? field("用户名或邮箱", "account", "", "text", 'required autocomplete="username" maxlength="255"') : field("用户名", "username", "", "text", 'required minlength="2" maxlength="32" autocomplete="username"') + field("邮箱", "email", "", "email", 'required autocomplete="email" maxlength="255"')}${field("密码", "password", "", "password", `required ${mode === "register" ? 'minlength="8" autocomplete="new-password"' : 'autocomplete="current-password"'}`)}${mode === "register" ? field("确认密码", "passwordConfirmation", "", "password", 'required minlength="8" autocomplete="new-password"') : ""}<button class="btn-primary" type="submit">${icon("log-in")}${mode === "login" ? "登录" : "注册"}</button></form>${tool("theme", "切换主题", "sun-moon")}</div></div></section>${utilities()}`;
+  root.innerHTML = `<section class="auth-screen show"><div class="auth-layout"><aside class="auth-aside"><div class="brand"><div class="brand-mark">W</div><span>welo</span></div><div class="auth-quote"><h1>Welo</h1><p>让团队的每一步，都清晰发生。</p></div></aside><div class="auth-form"><div class="auth-tabs"><button data-action="login-mode" class="${mode === "login" ? "active" : ""}">登录</button><button data-action="register-mode" class="${mode === "register" ? "active" : ""}">注册</button></div><h2>${mode === "login" ? "欢迎回来" : "创建账号"}</h2><p role="status">${esc(message)}</p><form id="authForm" data-mode="${mode}" class="auth-fields">${mode === "login" ? field("用户名或邮箱", "account", "", "text", 'required autocomplete="username" maxlength="255"') : field("用户名", "username", "", "text", 'required minlength="2" maxlength="32" autocomplete="username"') + field("邮箱", "email", "", "email", 'required autocomplete="email" maxlength="255"')}${field("密码", "password", "", "password", `required ${mode === "register" ? 'minlength="8" autocomplete="new-password"' : 'autocomplete="current-password"'}`)}${mode === "register" ? field("确认密码", "passwordConfirmation", "", "password", 'required minlength="8" autocomplete="new-password"') : ""}<button class="btn-primary" type="submit">${icon("log-in")}${mode === "login" ? "登录" : "注册"}</button></form><div class="auth-support">${button("feedback-open", "用户留言", "message-square")}</div>${tool("theme", "切换主题", "sun-moon")}</div></div></section>${utilities()}`;
   hydrate();
+}
+
+function feedbackDialog() {
+  openDialog(
+    "用户留言",
+    field(
+      "用户昵称",
+      "nickname",
+      feedbackDraft.nickname,
+      "text",
+      'required minlength="1" maxlength="64"',
+    ) +
+      field(
+        "联系方式",
+        "contact",
+        feedbackDraft.contact,
+        "text",
+        'required minlength="3" maxlength="128"',
+      ) +
+      textareaField(
+        "留言内容",
+        "message",
+        feedbackDraft.message,
+        'required minlength="1" maxlength="1024" rows="6"',
+      ),
+    async (data) => {
+      feedbackDraft = data;
+      await api.sendFeedback(data);
+      feedbackDraft = { nickname: "", contact: "", message: "" };
+      closeDialog(true);
+      toast("留言已发送");
+    },
+    "",
+    "发送留言",
+    "send",
+    "发送中",
+  );
 }
 
 function shell() {
@@ -1023,11 +1067,19 @@ async function teamView(gen) {
     `<div class="page-heading"><h1>${esc(state.team.name)}</h1><div class="head-actions">${button("team-edit", "团队设置", "settings-2", writable() ? "" : "disabled")}${admin() ? button("invite", "邀请成员", "user-plus", writable() ? "" : "disabled") : button("leave-team", "退出团队", "log-out", writable() ? "" : "disabled")}</div></div><p class="page-subtitle">${state.team.status === "active" ? "正常" : "已归档"} · ${esc(state.team.description || "")}</p>${table(["人员", "角色", "未完成任务", "操作"], members.map((m) => `<tr><td>${esc(m.user.username)}</td><td><span class="role ${m.role === "admin" ? "admin" : ""}">${m.role === "admin" ? "管理员" : "成员"}</span></td><td>${m.openTaskCount}</td><td>${admin() && m.user.id !== state.user.id ? tool("member-remove", "移除成员", "user-minus", `data-id="${esc(m.user.id)}"`) : ""}</td></tr>`).join(""))}`;
 }
 
-function openDialog(title, body, save, extra = "") {
+function openDialog(
+  title,
+  body,
+  save,
+  extra = "",
+  submitLabel = "保存",
+  submitIcon = "check",
+  busyLabel = "",
+) {
   returnFocus = document.activeElement;
   const d = $("#dialog");
   modalSave = save;
-  d.innerHTML = `<form id="dialogForm"><div class="modal-head"><h2 id="dialogTitle">${esc(title)}</h2>${tool("dialog-close", "关闭", "x")}</div><div class="modal-body">${body}<p id="dialogError" role="alert"></p></div><div class="modal-foot">${extra}${button("dialog-close", "取消", "x")}${save ? '<button type="submit" class="btn-primary">' + icon("check") + "保存</button>" : ""}</div></form>`;
+  d.innerHTML = `<form id="dialogForm"${busyLabel ? ` data-busy-label="${esc(busyLabel)}"` : ""}><div class="modal-head"><h2 id="dialogTitle">${esc(title)}</h2>${tool("dialog-close", "关闭", "x")}</div><div class="modal-body">${body}<p id="dialogError" role="alert"></p></div><div class="modal-foot">${extra}${button("dialog-close", "取消", "x")}${save ? '<button type="submit" class="btn-primary">' + icon(submitIcon) + esc(submitLabel) + "</button>" : ""}</div></form>`;
   d.setAttribute("aria-labelledby", "dialogTitle");
   d.showModal();
   hydrate();
@@ -1622,6 +1674,10 @@ root.addEventListener("submit", (event) => {
     if (modalBusy || !modalSave) return;
     modalBusy = true;
     const save = modalSave;
+    const submitButton = form.querySelector('[type="submit"]');
+    const submitLabel = submitButton?.textContent;
+    if (submitButton && form.dataset.busyLabel)
+      submitButton.textContent = form.dataset.busyLabel;
     form.querySelectorAll("button").forEach((b) => (b.disabled = true));
     Promise.resolve()
       .then(() => save(data))
@@ -1633,6 +1689,7 @@ root.addEventListener("submit", (event) => {
       .finally(() => {
         modalBusy = false;
         form.querySelectorAll("button").forEach((b) => (b.disabled = false));
+        if (submitButton?.isConnected) submitButton.textContent = submitLabel;
       });
     return;
   }
@@ -1715,6 +1772,7 @@ root.addEventListener("click", (event) => {
   busy(node, async () => {
     if (action === "session-retry") restoreSession();
     if (action === "theme") theme();
+    if (action === "feedback-open") feedbackDialog();
     if (action === "login-mode" || action === "register-mode")
       renderAuth(action === "login-mode" ? "login" : "register");
     if (action === "logout") {
