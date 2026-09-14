@@ -107,6 +107,39 @@ svg {
   align-items: center;
   gap: 6px;
 }
+.mine-filter {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 9px 11px;
+  background: var(--white);
+  color: var(--muted);
+  cursor: pointer;
+}
+.mine-filter:hover,
+.mine-filter.active {
+  border-color: var(--teal);
+  background: color-mix(in srgb, var(--teal) 10%, var(--white));
+  color: var(--teal);
+}
+.filter-hint {
+  margin: -8px 0 16px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.status + .icon-btn {
+  width: 28px;
+  height: 28px;
+  margin-left: 6px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--teal);
+  vertical-align: middle;
+}
+.status + .icon-btn:hover {
+  border-color: var(--teal);
+  background: var(--subtle-bg);
+}
 .table-scroll {
   overflow-x: auto;
   background: var(--white);

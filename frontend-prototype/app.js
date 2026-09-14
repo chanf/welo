@@ -540,7 +540,7 @@ function taskRows(tasks, schedule = false) {
   return tasks
     .map(
       (t) =>
-        `<tr><td><button class="text-link" data-action="task-edit" data-id="${esc(t.id)}">${esc(t.title)}</button></td><td>${esc(t.assignee.username)}${t.assignee.isActiveMember === false ? "（已离队）" : ""}</td>${schedule ? `<td>${esc(formatTaskDateTime(t.startDate))}</td>` : ""}<td>${esc(formatTaskDateTime(t.endDate))}</td><td><span class="status ${esc(t.status)}">${esc(statuses[t.status])}</span></td>${schedule ? "" : `<td>${esc(priorities[t.priority])}</td>`}</tr>`,
+        `<tr><td><button class="text-link" data-action="task-edit" data-id="${esc(t.id)}">${esc(t.title)}</button></td><td>${esc(t.assignee.username)}${t.assignee.isActiveMember === false ? "（已离队）" : ""}</td>${schedule ? `<td>${esc(formatTaskDateTime(t.startDate))}</td>` : ""}<td>${esc(formatTaskDateTime(t.endDate))}</td><td><span class="status ${esc(t.status)}">${esc(statuses[t.status])}</span>${!schedule && t.status !== "done" ? tool("task-complete", "标记为已完成", "check", `data-id="${esc(t.id)}" data-updated-at="${esc(t.updatedAt)}" ${taskWritable() ? "" : "disabled"}`) : ""}</td>${schedule ? "" : `<td>${esc(priorities[t.priority])}</td>`}</tr>`,
     )
     .join("");
 }
@@ -1005,7 +1005,7 @@ async function tasksView(gen) {
   if (gen !== state.generation) return;
   state.tasks = result.data;
   $("#view").innerHTML =
-    `<div class="page-heading"><h1>任务</h1><div class="head-actions">${projectSelector()}${button("task-create", "新建任务", "plus", taskWritable() ? "" : "disabled")}</div></div><form id="taskSearch" class="toolbar"><input name="keyword" aria-label="搜索任务" placeholder="搜索任务" value="${esc(f.keyword)}"><select name="status" aria-label="任务状态">${enumOptions(statuses, f.status, "全部状态")}</select><select name="priority" aria-label="优先级">${enumOptions(priorities, f.priority, "全部优先级")}</select><select name="sortBy" aria-label="排序字段">${enumOptions({ endDate: "截止时间", createdAt: "创建时间", priority: "优先级" }, f.sortBy || "endDate")}</select><select name="sortOrder" aria-label="排序方向">${enumOptions({ asc: "升序", desc: "降序" }, f.sortOrder || "asc")}</select><label><input type="checkbox" name="mine" ${f.mine ? "checked" : ""}>只看我的</label><button class="btn-secondary" type="submit">${icon("search")}搜索</button></form>${table(["任务", "负责人", "截止", "状态", "优先级"], taskRows(result.data))}${pager(result.meta, "task")}`;
+    `<div class="page-heading"><h1>任务</h1><div class="head-actions">${projectSelector()}${button("task-create", "新建任务", "plus", taskWritable() ? "" : "disabled")}</div></div><form id="taskSearch" class="toolbar"><input name="keyword" aria-label="搜索任务" placeholder="搜索任务" value="${esc(f.keyword)}"><select name="status" aria-label="任务状态">${enumOptions(statuses, f.status, "全部状态")}</select><select name="priority" aria-label="优先级">${enumOptions(priorities, f.priority, "全部优先级")}</select><select name="sortBy" aria-label="排序字段">${enumOptions({ endDate: "截止时间", createdAt: "创建时间", priority: "优先级" }, f.sortBy || "endDate")}</select><select name="sortOrder" aria-label="排序方向">${enumOptions({ asc: "升序", desc: "降序" }, f.sortOrder || "asc")}</select><button type="button" class="mine-filter ${f.mine ? "active" : ""}" data-action="task-mine" aria-pressed="${f.mine ? "true" : "false"}">${icon(f.mine ? "check" : "user-round")}只看我的</button><button class="btn-secondary" type="submit">${icon("search")}搜索</button></form>${f.mine ? `<p class="filter-hint" role="status">当前显示我的任务 · 共 ${result.meta.pagination?.total ?? result.data.length} 项</p>` : ""}${table(["任务", "负责人", "截止", "状态", "优先级"], taskRows(result.data))}${pager(result.meta, "task")}`;
 }
 async function settingsView() {
   $("#view").innerHTML =
@@ -1820,6 +1820,25 @@ root.addEventListener("click", (event) => {
     }
     if (action === "task-create" || action === "task-edit")
       await taskEditor(id);
+    if (action === "task-mine") {
+      state.filters.mine = !state.filters.mine;
+      state.taskPage = 1;
+      await navigate("tasks");
+    }
+    if (action === "task-complete") {
+      try {
+        await api.updateTask(state.team.id, state.project.id, id, {
+          status: "done",
+          expectedUpdatedAt: node.dataset.updatedAt,
+        });
+        await refreshData();
+        toast("任务已完成");
+      } catch (error) {
+        if (error.code === "VERSION_CONFLICT")
+          throw new Error("任务已发生变化，请刷新后重试");
+        throw error;
+      }
+    }
     if (action === "project-delete") {
       closeDialog();
       confirmDialog(
