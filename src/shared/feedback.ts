@@ -36,10 +36,18 @@ export async function clearFeedbackAttempt(db: D1Database, id: number): Promise<
 }
 
 export async function sendFeedbackToTelegram(env: Env, feedback: Feedback): Promise<void> {
-  const token = env.TELEGRAM_BOT_TOKEN?.trim();
-  const chatId = env.TELEGRAM_FEEDBACK_CHAT_ID?.trim();
+  // Keep the Welo names as the source of truth, while accepting the names
+  // used by the previously working contact-form integration during migration.
+  const token = env.TELEGRAM_BOT_TOKEN?.trim() || env.CONTACT_TELEGRAM_TOKEN?.trim();
+  const chatId = env.TELEGRAM_FEEDBACK_CHAT_ID?.trim() || env.CONTACT_TELEGRAM_CHAT_ID?.trim();
   const unavailable = () => new ApiError(503, "TELEGRAM_UNAVAILABLE", "暂时无法发送留言，请稍后重试");
-  if (!token || !chatId) throw unavailable();
+  if (!token || !chatId) {
+    console.error(JSON.stringify({
+      event: "telegram_feedback_config_missing",
+      missing: { token: !token, chatId: !chatId },
+    }));
+    throw unavailable();
+  }
 
   try {
     const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
@@ -48,12 +56,24 @@ export async function sendFeedbackToTelegram(env: Env, feedback: Feedback): Prom
       body: JSON.stringify({
         chat_id: chatId,
         text: `Welo用户留言：\n用户昵称：${feedback.nickname}\n联系方式：${feedback.contact}\n留言内容：${feedback.message}`,
+        disable_web_page_preview: true,
       }),
     });
-    const payload = await response.json().catch(() => null) as { ok?: boolean } | null;
-    if (!response.ok || payload?.ok !== true) throw unavailable();
+    const payload = await response.json().catch(() => null) as { ok?: boolean; error_code?: number } | null;
+    if (!response.ok || payload?.ok !== true) {
+      console.error(JSON.stringify({
+        event: "telegram_feedback_rejected",
+        status: response.status,
+        errorCode: payload?.error_code ?? null,
+      }));
+      throw unavailable();
+    }
   } catch (error) {
     if (error instanceof ApiError) throw error;
+    console.error(JSON.stringify({
+      event: "telegram_feedback_request_failed",
+      errorType: error instanceof Error ? error.name : "unknown",
+    }));
     throw unavailable();
   }
 }

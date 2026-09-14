@@ -278,6 +278,8 @@ npx wrangler secret put TELEGRAM_FEEDBACK_CHAT_ID
 
 `TELEGRAM_BOT_TOKEN` 来自 BotFather；`TELEGRAM_FEEDBACK_CHAT_ID` 是接收留言的个人聊天、群组或频道 chat id。两者不得写入 `wrangler.jsonc`、前端环境变量或 Git。缺少任意一个时，其他 API 不受影响，但 `POST /api/v1/public/feedback` 会返回 503。
 
+如果沿用了早期 contact-form 项目的配置，也兼容读取 `CONTACT_TELEGRAM_TOKEN` 与 `CONTACT_TELEGRAM_CHAT_ID`；新部署建议统一迁移到上面的 Welo 变量名。私聊场景需要先向 Bot 发送 `/start`，群组场景需要将 Bot 加入并授予发消息权限。可在本地用 Bot API 的 `getMe` 验证 Token，用 `getUpdates` 核对目标 `chat.id`，不要把真实 Token 写入仓库或聊天记录。
+
 ### 4.3 自动构建配置
 
 使用 Cloudflare Workers Builds 连接 Git 仓库时，配置：
