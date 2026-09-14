@@ -124,7 +124,7 @@ const state = {
   invitationPage: 1,
   trashPage: 1,
   activityPage: 1,
-  trashType: "project",
+  trashType: "task",
   filters: {},
 };
 let toastTimer,
@@ -1393,8 +1393,40 @@ async function inviteMember() {
   );
 }
 async function trashView() {
+  const result = await api.trash(state.team.id, {
+    page: state.trashPage,
+    pageSize: 20,
+    type: state.trashType,
+  });
+  if (gen !== state.generation) return;
+  const typeSwitch = `<div class="view-switch trash-switch" role="tablist" aria-label="回收站类型"><button type="button" role="tab" aria-selected="${state.trashType === "task"}" data-action="trash-type" data-type="task" class="${state.trashType === "task" ? "active" : ""}">任务</button><button type="button" role="tab" aria-selected="${state.trashType === "project"}" data-action="trash-type" data-type="project" class="${state.trashType === "project" ? "active" : ""}">项目</button></div>`;
+  const restoreAction = (item, resource) =>
+    tool(
+      "trash-restore",
+      "恢复",
+      "rotate-ccw",
+      `data-type="${esc(state.trashType)}" data-id="${esc(resource.id)}" data-updated-at="${esc(resource.updatedAt)}" ${
+        item.expired || !writable() ? "disabled" : ""
+      }`,
+    );
+  const restoreUntil = (item) =>
+    item.expired
+      ? '<span class="status todo">恢复期限已过</span>'
+      : `可恢复至 ${esc(formatInvitationDateTime(item.restorableUntil))}`;
+  const rows = result.data.map((item) => {
+    if (state.trashType === "task") {
+      const task = item.task;
+      return `<tr><td>${esc(task.title)}<small class="description">${esc(task.detail || "无详细内容")}</small></td><td>${esc(task.assignee.username)}${task.assignee.isActiveMember === false ? "（已离队）" : ""}</td><td>${esc(formatTaskDateTime(task.endDate))}</td><td>${esc(formatInvitationDateTime(item.deletedAt))}</td><td>${restoreUntil(item)}</td><td>${restoreAction(item, task)}</td></tr>`;
+    }
+    const project = item.project;
+    return `<tr><td>${esc(project.name)}<small class="description">${esc(project.description || "无描述")}</small></td><td>${project.status === "active" ? "进行中" : "已归档"}</td><td>${esc(formatInvitationDateTime(item.deletedAt))}</td><td>${restoreUntil(item)}</td><td>${restoreAction(item, project)}</td></tr>`;
+  });
+  const heads =
+    state.trashType === "task"
+      ? ["任务", "负责人", "截止", "删除时间", "恢复期限", "操作"]
+      : ["项目", "原状态", "删除时间", "恢复期限", "操作"];
   $("#view").innerHTML =
-    `<div class="page-heading"><h1>回收站</h1></div><p class="page-subtitle">已删除的项目和任务可在 30 天内恢复。</p>`;
+    `<div class="page-heading"><h1>回收站</h1>${typeSwitch}</div><p class="page-subtitle">已删除的项目和任务可在 30 天内恢复。</p>${table(heads, rows.join(""))}${pager(result.meta, "trash")}`;
 }
 async function activityView() {
   const result = await api.activity(state.team.id, { page: 1, pageSize: 50 });
@@ -1901,6 +1933,24 @@ root.addEventListener("click", (event) => {
         }),
       );
     }
+    if (
+      action === "trash-type" &&
+      ["task", "project"].includes(node.dataset.type)
+    ) {
+      state.trashType = node.dataset.type;
+      state.trashPage = 1;
+      await navigate("trash");
+    }
+    if (action === "trash-restore") {
+      const input = {
+        expectedUpdatedAt: node.dataset.updatedAt,
+      };
+      if (node.dataset.type === "task")
+        await api.restoreTrashTask(state.team.id, id, input);
+      else await api.restoreTrashProject(state.team.id, id, input);
+      await refreshData();
+      toast("已恢复");
+    }
     if (action === "toggle-view") {
       $("#ganttPanel").hidden = !$("#ganttPanel").hidden;
       $("#scheduleTable").hidden = !$("#scheduleTable").hidden;
@@ -1963,7 +2013,7 @@ root.addEventListener("click", (event) => {
       resetGanttTimeline();
       drawGantt();
     }
-    if (/^(project|task|admin)-(prev|next)$/.test(action)) {
+    if (/^(project|task|admin|trash)-(prev|next)$/.test(action)) {
       const [key, direction] = action.split("-");
       state[`${key}Page`] += direction === "next" ? 1 : -1;
       await navigate(state.page);
