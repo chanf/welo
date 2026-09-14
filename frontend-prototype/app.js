@@ -1430,8 +1430,12 @@ async function trashView(gen) {
 }
 async function activityView() {
   const result = await api.activity(state.team.id, { page: 1, pageSize: 50 });
+  const entityLabel = (item) =>
+    item.entityType === "task" && item.entityName
+      ? item.entityName
+      : `${item.entityType} #${item.entityId}`;
   $("#view").innerHTML =
-    `<div class="page-heading"><h1>操作记录</h1></div>${table(["时间", "操作", "对象"], result.data.map((x) => `<tr><td>${esc(x.createdAt)}</td><td>${esc(x.action)}</td><td>${esc(x.entityType)} #${esc(x.entityId)}</td></tr>`).join(""))}`;
+    `<div class="page-heading"><h1>操作记录</h1></div>${table(["时间", "操作", "对象"], result.data.map((x) => `<tr><td>${esc(x.createdAt)}</td><td>${esc(x.action)}</td><td>${esc(entityLabel(x))}</td></tr>`).join(""))}`;
 }
 
 async function loadAssignees(groupId, value = "", autoSelect = false) {

@@ -1151,19 +1151,31 @@ app.get("/api/v1/teams/:teamId/activity", async (c) => {
   const where = clauses.join(" AND ");
   const count = await c.env.DB.prepare(`SELECT COUNT(*) AS count FROM audit_logs a WHERE ${where}`).bind(...params).first<{ count: number }>();
   const rows = await c.env.DB.prepare(`
-    SELECT a.*, u.username AS actor_name FROM audit_logs a JOIN users u ON u.id = a.actor_id
+    SELECT a.*, u.username AS actor_name, task.title AS task_title
+    FROM audit_logs a
+    JOIN users u ON u.id = a.actor_id
+    LEFT JOIN tasks task ON a.entity_type = 'task' AND task.id = CAST(a.entity_id AS INTEGER)
+    LEFT JOIN projects project ON project.id = task.project_id AND project.team_id = a.team_id
     WHERE ${where} ORDER BY a.created_at DESC, a.id DESC LIMIT ? OFFSET ?
-  `).bind(...params, pageSize, offset).all<{ id: number; action: string; entity_type: string; entity_id: string; actor_id: number; actor_name: string; before_json: string | null; after_json: string | null; request_id: string | null; created_at: string }>();
-  return ok(c, rows.results.map((row) => ({
-    id: String(row.id),
-    action: row.action,
-    entityType: row.entity_type,
-    entityId: row.entity_id,
-    actor: row.entity_type === "invitation" ? null : { id: String(row.actor_id), username: row.actor_name },
-    before: row.entity_type === "invitation" ? null : JSON.parse(row.before_json ?? "null"),
-    after: row.entity_type === "invitation" ? null : JSON.parse(row.after_json ?? "null"),
-    createdAt: row.created_at,
-  })), 200, pagination(page, pageSize, Number(count?.count ?? 0)));
+  `).bind(...params, pageSize, offset).all<{ id: number; action: string; entity_type: string; entity_id: string; actor_id: number; actor_name: string; before_json: string | null; after_json: string | null; request_id: string | null; created_at: string; task_title: string | null }>();
+  return ok(c, rows.results.map((row) => {
+    const before = row.entity_type === "invitation" ? null : JSON.parse(row.before_json ?? "null");
+    const after = row.entity_type === "invitation" ? null : JSON.parse(row.after_json ?? "null");
+    const auditTitle = [after, before]
+      .map((snapshot) => (snapshot && typeof snapshot === "object" && "title" in snapshot ? (snapshot as { title?: unknown }).title : null))
+      .find((title): title is string => typeof title === "string" && title.length > 0);
+    return {
+      id: String(row.id),
+      action: row.action,
+      entityType: row.entity_type,
+      entityId: row.entity_id,
+      entityName: row.entity_type === "task" ? (auditTitle ?? row.task_title) : null,
+      actor: row.entity_type === "invitation" ? null : { id: String(row.actor_id), username: row.actor_name },
+      before,
+      after,
+      createdAt: row.created_at,
+    };
+  }), 200, pagination(page, pageSize, Number(count?.count ?? 0)));
 });
 
 app.onError((error, c) => {
