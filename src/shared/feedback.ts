@@ -25,8 +25,14 @@ export async function isFeedbackRateLimited(db: D1Database, ipHash: string): Pro
   return Number(counts?.minute_count ?? 0) >= 1 || Number(counts?.hour_count ?? 0) >= 5;
 }
 
-export async function recordFeedbackAttempt(db: D1Database, ipHash: string): Promise<void> {
-  await db.prepare("INSERT INTO feedback_rate_limits (ip_hash) VALUES (?)").bind(ipHash).run();
+export async function recordFeedbackAttempt(db: D1Database, ipHash: string): Promise<number> {
+  const result = await db.prepare("INSERT INTO feedback_rate_limits (ip_hash) VALUES (?)").bind(ipHash).run();
+  return Number(result.meta.last_row_id);
+}
+
+/** Remove a reservation when delivery fails so a visitor can retry after recovery. */
+export async function clearFeedbackAttempt(db: D1Database, id: number): Promise<void> {
+  await db.prepare("DELETE FROM feedback_rate_limits WHERE id = ?").bind(id).run();
 }
 
 export async function sendFeedbackToTelegram(env: Env, feedback: Feedback): Promise<void> {

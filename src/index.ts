@@ -10,7 +10,7 @@ import { isoTimestamp, nextTaskVersion, nowIso, shanghaiToday } from "./shared/t
 import { allocateUserColor } from "./shared/user-color";
 import { projectAccess, requireTeamAdmin, teamAccess, type AccessContext, type ProjectRow, type TeamRow } from "./shared/access";
 import { auditStatement } from "./shared/audit";
-import { feedbackSchema, isFeedbackRateLimited, recordFeedbackAttempt, sendFeedbackToTelegram } from "./shared/feedback";
+import { clearFeedbackAttempt, feedbackSchema, isFeedbackRateLimited, recordFeedbackAttempt, sendFeedbackToTelegram } from "./shared/feedback";
 
 type App = { Bindings: Env; Variables: { requestId: string; auth: ReturnType<typeof currentAuth> } };
 type AppContext = Context<App>;
@@ -196,8 +196,19 @@ app.post("/api/v1/public/feedback", async (c) => {
   const ip = c.req.header("CF-Connecting-IP")?.trim() || "unknown";
   const ipHash = await sha256(`welo-feedback:${ip}`);
   if (await isFeedbackRateLimited(c.env.DB, ipHash)) throw new ApiError(429, "RATE_LIMITED", "留言提交过于频繁，请稍后再试");
-  await recordFeedbackAttempt(c.env.DB, ipHash);
-  await sendFeedbackToTelegram(c.env, body);
+  const attemptId = await recordFeedbackAttempt(c.env.DB, ipHash);
+  try {
+    await sendFeedbackToTelegram(c.env, body);
+  } catch (error) {
+    // A failed Telegram delivery is not a successful submission. Release the
+    // reservation so the visitor can retry once the upstream service recovers.
+    try {
+      await clearFeedbackAttempt(c.env.DB, attemptId);
+    } catch {
+      // Preserve the original, user-safe Telegram error if cleanup itself fails.
+    }
+    throw error;
+  }
   return ok(c, { status: "sent" }, 201);
 });
 
