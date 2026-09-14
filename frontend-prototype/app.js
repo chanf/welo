@@ -1279,7 +1279,7 @@ async function onboardingView() {
     .myInvitations({ status: "pending" })
     .catch(() => ({ data: [] }));
   $("#view").innerHTML =
-    `<div class="page-heading"><h1>开始使用 Welo</h1></div><p class="page-subtitle">创建一个团队，或处理其他团队发来的邀请。</p><section class="panel"><div class="panel-head"><h2>创建团队</h2></div><div class="panel-body">${button("team-create", "创建团队", "plus")}</div></section><section class="panel"><div class="panel-head"><h2>我的邀请</h2></div>${invitations.data?.length ? invitations.data.map((i) => `<div class="member-row"><div class="identity"><strong>${esc(i.team.name)}</strong><small>${esc(i.inviter.username)} 邀请你加入</small></div>${button("invitation-accept", "接受", "check", `data-id="${i.id}`)}${button("invitation-decline", "拒绝", "x", `data-id="${i.id}`)}</div>`).join("") : empty("暂无待处理邀请")}</section>`;
+    `<div class="page-heading"><h1>开始使用 Welo</h1></div><p class="page-subtitle">创建一个团队，或处理其他团队发来的邀请。</p><section class="panel"><div class="panel-head"><h2>创建团队</h2></div><div class="panel-body">${button("team-create", "创建团队", "plus")}</div></section><section class="panel"><div class="panel-head"><h2>我的邀请</h2></div>${invitations.data?.length ? invitations.data.map((i) => `<div class="member-row"><div class="identity"><strong>${esc(i.team.name)}</strong><small>${esc(i.inviter.username)} 邀请你加入</small></div>${button("invitation-accept", "接受", "check", `data-id="${esc(i.id)}"`)}${button("invitation-decline", "拒绝", "x", `data-id="${esc(i.id)}"`)} </div>`).join("") : empty("暂无待处理邀请")}</section>`;
 }
 
 async function invitationsView() {
