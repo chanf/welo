@@ -34,7 +34,7 @@ import {
   UserRound,
 } from "lucide";
 
-import { t, onLangChange, getLang } from "./i18n.js";
+import { t, onLangChange, getLang, initI18n } from "./i18n.js";
 const icons = {
   LayoutDashboard,
   FolderKanban,
